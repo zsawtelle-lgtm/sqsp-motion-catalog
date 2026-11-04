@@ -1,0 +1,18 @@
+{
+  "id": "18",
+  "slug": "18-curtain-footer",
+  "name": "Curtain Footer Reveal",
+  "category": "Scroll effect",
+  "use": "The site footer sits fixed behind the page; the last section scrolls up off it like a curtain, with a soft shadow and rounded bottom corners, while the footer content rises and fades in.",
+  "best_for": [
+    "Agency",
+    "Portfolio",
+    "Architecture",
+    "Hospitality"
+  ],
+  "install": "Footer injection",
+  "dependencies": "None",
+  "snippet_kb": 7.7,
+  "status": "beta",
+  "notes": "Sitewide, no marker. Room is made by a script-owned aria-hidden spacer sized to the footer by ResizeObserver; no height/margin on Squarespace elements. Skips when the footer is taller than 85% of the screen, or when a transformed ancestor breaks position: fixed. Rounded corners need overflow: clip (Safari 16+); older browsers get square corners. Not yet verified on a live Squarespace site — real header z-index and #siteWrapper styles there are unconfirmed."
+}

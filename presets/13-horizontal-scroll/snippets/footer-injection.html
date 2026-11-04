@@ -1,0 +1,212 @@
+<!-- ==========================================================
+     SWTL MOTION · 13 HORIZONTAL SCROLL GALLERY     v1.0.0
+     Paste into: Settings → Developer Tools → Code Injection → FOOTER
+     Source:     a List Section, Carousel layout
+     Activate:   a Code Block in the section ABOVE it with
+                 <div data-swtl-hscroll hidden></div>
+     Docs: presets/13-horizontal-scroll/INSTALL.md
+     ========================================================== -->
+
+<style>
+  /* the section grows only by the script's own spacer */
+  .page-section.swtl-hs-on { flex-wrap: wrap; }
+  .swtl-hs-spacer { display: block; flex: 0 0 100%; width: 100%; pointer-events: none; }
+  .swtl-hs-stick { position: sticky; top: var(--swtl-hs-top, 0px); }
+  /* !important beats the carousel's own inline transform */
+  .swtl-hs-track { transform: translate3d(var(--swtl-hs-x, 0px), 0, 0) !important; transition: none !important; will-change: transform; }
+  .swtl-hs-swipe { overflow-x: auto !important; scroll-snap-type: x mandatory; scrollbar-width: none; }
+  .swtl-hs-swipe::-webkit-scrollbar { display: none; }
+  .swtl-hs-swipe .swtl-hs-track { transform: none !important; }
+  .swtl-hs-swipe .swtl-hs-track > * { scroll-snap-align: start; }
+  .swtl-hs-on .user-items-list-carousel__arrow-button, .swtl-hs-on .desktop-arrows, .swtl-hs-on .mobile-arrows { display: none !important; }
+  .swtl-hs-bar { position: absolute; height: var(--swtl-hs-bar-h, 2px); background: var(--swtl-hs-bar-bg, rgba(140,135,126,.35)); pointer-events: none; z-index: 5; }
+  .swtl-hs-bar i { position: absolute; inset: 0; background: var(--swtl-accent, #D4552B); transform-origin: 0 50%; transform: scaleX(var(--swtl-hs-p, 0)); }
+  .swtl-hs-unclip { overflow-x: clip !important; overflow-y: visible !important; }
+</style>
+
+<script>
+(function () {
+  'use strict';
+
+  /* CONFIG — override with window.SwtlHScroll = {…} above this snippet. */
+  var C = {
+    headerOffset: 'auto',   /* 'auto' = fixed/sticky header height, or px */
+    mobileBreakpoint: 768,  /* below this: native swipe row, no pin */
+    progressBar: true,      /* accent hairline under the cards */
+    barGap: 32              /* px from the cards to the hairline */
+  };
+  var W = window, D = document, u = W.SwtlHScroll || {}, k;
+  for (k in u) if (Object.prototype.hasOwnProperty.call(u, k)) C[k] = u[k];
+
+  var framed = true;
+  try { framed = W.self !== W.top; } catch (e) {}
+  if (framed) return;
+
+  var CLS = ['swtl-hs-on', 'swtl-hs-stick', 'swtl-hs-track', 'swtl-hs-swipe', 'swtl-hs-unclip'];
+  var TRACK = '.user-items-list-carousel__slides';
+  var mode = '', items = [], touched = [], owned = [], raf = 0, io = null, ro = null, live = 0;
+  var rm = W.matchMedia ? W.matchMedia('(prefers-reduced-motion: reduce)') : null;
+
+  function clamp(x) { return x < 0 ? 0 : x > 1 ? 1 : x; }
+  function mark(el, c) { el.classList.add(c); if (touched.indexOf(el) < 0) touched.push(el); }
+  function cs(el) { return W.getComputedStyle(el); }
+
+  /* '' = off · 'pin' = scroll-driven · 'swipe' = native scroll-snap row */
+  function wanted() {
+    var b = D.body.classList;
+    if (b.contains('sqs-edit-mode-active') || b.contains('sqs-is-page-editing')) return '';
+    return W.innerWidth < C.mobileBreakpoint || (rm && rm.matches) ? 'swipe' : 'pin';
+  }
+
+  function headerOffset() {
+    if (C.headerOffset !== 'auto') return parseFloat(C.headerOffset) || 0;
+    var h = D.querySelector('#header, header.header');
+    if (!h || !/fixed|sticky/.test(cs(h).position)) return 0;
+    return Math.max(0, Math.round(h.getBoundingClientRect().bottom));
+  }
+
+  /* sticky fails under overflow:hidden; clip does not */
+  function unclip(el) {
+    var html = D.documentElement, hs = cs(html);
+    for (el = el.parentElement; el && el !== html; el = el.parentElement) {
+      var s = cs(el), prop = el === D.body && hs.overflowX + hs.overflowY === 'visiblevisible';
+      if (/hidden|auto|scroll/.test(s.overflowX + s.overflowY) && !prop) mark(el, 'swtl-hs-unclip');
+    }
+  }
+
+  /* marker → the next carousel List Section at or below it (or data-section id) */
+  function sections() {
+    var out = [], l = D.querySelectorAll('[data-swtl-hscroll]'), i, s, id;
+    for (i = 0; i < l.length; i++) {
+      id = l[i].getAttribute('data-section');
+      s = id ? D.querySelector('section[data-section-id="' + id + '"]') : l[i].closest('section.page-section');
+      while (s && !s.querySelector(TRACK)) do s = s.nextElementSibling; while (s && !s.matches('section.page-section'));
+      if (s && out.indexOf(s) < 0) out.push(s);
+    }
+    return out;
+  }
+
+  function own(cls, parent, tag) {
+    var el = D.createElement(tag || 'div');
+    el.className = cls;
+    el.setAttribute('aria-hidden', 'true');
+    owned.push(parent.appendChild(el));
+    return el;
+  }
+
+  function build(m) {
+    var secs = sections();
+    for (var i = 0; i < secs.length; i++) {
+      var sec = secs[i], track = sec.querySelector(TRACK);
+      var holder = track.closest('.user-items-list-carousel__slideshow-holder') || track.parentElement;
+      var it = { sec: sec, track: track, holder: holder, cw: sec.querySelector('.content-wrapper') || holder.parentElement, dist: 0 };
+      mark(sec, 'swtl-hs-on');
+      mark(track, 'swtl-hs-track');
+      if (m === 'swipe') mark(holder, 'swtl-hs-swipe');
+      else {
+        mark(it.cw, 'swtl-hs-stick');
+        unclip(it.cw);
+        it.spacer = own('swtl-hs-spacer', sec);
+        if (C.progressBar) own('', it.bar = own('swtl-hs-bar', it.cw), 'i');
+      }
+      items.push(it);
+    }
+  }
+
+  /* spacer height = horizontal travel: 1px of scroll = 1px of slide */
+  function measure() {
+    if (mode !== 'pin') return;
+    var off = headerOffset();
+    for (var i = 0; i < items.length; i++) {
+      var it = items[i];
+      it.h = it.cw.offsetHeight;
+      it.top = Math.min(off, W.innerHeight - it.h);
+      it.dist = Math.max(0, it.track.scrollWidth - it.holder.clientWidth);
+      it.cw.style.setProperty('--swtl-hs-top', it.top + 'px');
+      it.spacer.style.height = it.dist + 'px';
+      if (it.bar) {
+        var hr = it.holder.getBoundingClientRect(), cr = it.cw.getBoundingClientRect();
+        it.bar.style.cssText = 'left:' + (hr.left - cr.left) + 'px;width:' + hr.width + 'px;top:' + (hr.bottom - cr.top + C.barGap) + 'px';
+      }
+    }
+    frame();
+  }
+
+  function frame() {
+    raf = 0;
+    if (mode !== 'pin') return;
+    var i, it, ps = [];
+    for (i = 0; i < items.length; i++) {        /* read pass */
+      it = items[i];
+      ps[i] = it.dist ? clamp((it.top + it.h - it.spacer.getBoundingClientRect().top) / it.dist) : 0;
+    }
+    for (i = 0; i < items.length; i++) {        /* write pass: transform only */
+      it = items[i];
+      it.track.style.setProperty('--swtl-hs-x', (-it.dist * ps[i]).toFixed(2) + 'px');
+      if (it.bar) it.bar.style.setProperty('--swtl-hs-p', ps[i].toFixed(4));
+    }
+  }
+  function tick() { if (!raf) raf = W.requestAnimationFrame(frame); }
+  function request() { if (live) tick(); }
+
+  function enable(m) {
+    build(m);
+    if (!items.length) return;
+    mode = m;
+    if (m !== 'pin') return;
+    measure();
+    W.addEventListener('scroll', request, { passive: true });
+    /* rAF runs only while a gallery section is on screen */
+    if (W.IntersectionObserver) {
+      io = new IntersectionObserver(function (es) {
+        es.forEach(function (e) {
+          items.forEach(function (it) {
+            if (it.sec === e.target && !it.vis !== !e.isIntersecting) { it.vis = e.isIntersecting; live += it.vis ? 1 : -1; }
+          });
+        });
+        tick();                                   /* settle at 0 / 1 on exit */
+      });
+    } else live = 1;
+    /* images that load late change the track width */
+    if (W.ResizeObserver) ro = new ResizeObserver(function () { W.requestAnimationFrame(measure); });
+    items.forEach(function (it) { if (io) io.observe(it.sec); if (ro) ro.observe(it.track); });
+  }
+
+  function disable() {
+    if (raf) W.cancelAnimationFrame(raf);
+    raf = live = 0; mode = '';
+    W.removeEventListener('scroll', request);
+    if (io) io.disconnect();
+    if (ro) ro.disconnect();
+    io = ro = null;
+    owned.forEach(function (el) { if (el.parentNode) el.parentNode.removeChild(el); });
+    touched.forEach(function (t) {
+      CLS.forEach(function (c) { t.classList.remove(c); });
+      t.style.removeProperty('--swtl-hs-top');
+      t.style.removeProperty('--swtl-hs-x');
+      if (!t.getAttribute('style')) t.removeAttribute('style');
+    });
+    owned = []; touched = []; items = [];
+  }
+
+  /* returns true when it changed state */
+  function sync() {
+    var w = wanted();
+    if (w === mode) return false;
+    disable();
+    if (w) enable(w);
+    return true;
+  }
+
+  function init() {
+    sync();
+    new MutationObserver(sync).observe(D.body, { attributes: true, attributeFilter: ['class'] });
+    W.addEventListener('resize', function () { if (!sync()) measure(); });
+    if (rm) { if (rm.addEventListener) rm.addEventListener('change', sync); else if (rm.addListener) rm.addListener(sync); }
+  }
+
+  if (D.readyState === 'loading') D.addEventListener('DOMContentLoaded', init);
+  else init();
+})();
+</script>
+<!-- ============ end SWTL horizontal scroll gallery ============ -->

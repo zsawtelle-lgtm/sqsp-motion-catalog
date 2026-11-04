@@ -1,0 +1,18 @@
+{
+  "id": "11",
+  "slug": "11-stat-countup",
+  "name": "Stat Count-Up",
+  "category": "Text",
+  "use": "Numbers typed in Text blocks (25+, 1,200, 98%, $4.5M, 3.2x) count up from 0 as they scroll into view, with a thin accent line growing under each, then end on the exact typed text.",
+  "best_for": [
+    "About pages",
+    "Nonprofit impact",
+    "Professional services",
+    "Agency"
+  ],
+  "install": "Footer injection + Code Block",
+  "dependencies": "None",
+  "snippet_kb": 9.7,
+  "status": "beta",
+  "notes": "Over the 8 KB budget (unminified) because of the number parser (prefix/suffix/commas/decimals, year and 24/7 skipping), the byte-identical text-node restore and per-marker overrides. The typed number stays in the page (opacity 0, read by screen readers) and reserves its width; an aria-hidden tabular-nums copy counts over it, right-aligned, so nothing shifts. At the hand-off from the tabular copy to the typed (proportional) text, digits can move 1–2px. With underline on, a light wrapper span stays at rest so the line can stay drawn; textContent is identical and edit mode restores the original markup byte for byte. With underline: false the markup is byte-identical at rest."
+}

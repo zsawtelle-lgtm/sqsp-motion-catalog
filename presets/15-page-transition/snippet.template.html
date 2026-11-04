@@ -1,0 +1,223 @@
+<!-- ==========================================================
+     SWTL MOTION · 15 PAGE TRANSITION WIPE          v1.0.0
+     Paste into: Settings → Developer Tools → Code Injection → HEADER
+     Docs: presets/15-page-transition/INSTALL.md
+     ----------------------------------------------------------
+     Click an internal link: an ink panel wipes up over the page,
+     then the browser navigates. The next page starts covered and
+     the panel wipes up and off as soon as its HTML is ready.
+     Opt a link (or a whole area) out with data-swtl-pt="off".
+     ========================================================== -->
+
+<style>
+  /* Colors: set --swtl-paper / --swtl-ink once in Custom CSS to
+     restyle every SWTL motion preset at the same time. */
+  html.swtl-pt-cover::before,
+  #swtl-pt-panel {
+    position: fixed; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    background: var(--swtl-pt-panel, var(--swtl-ink, #1F1E1C));
+    color: var(--swtl-pt-label, var(--swtl-paper, #F4F1EA));
+    font-size: var(--swtl-pt-size, clamp(22px, 2.6vw, 34px));
+    font-weight: 600; letter-spacing: -0.01em; line-height: 1.1;
+  }
+  /* first-paint cover on the next page (label passed via a CSS var) */
+  html.swtl-pt-cover::before {
+    content: var(--swtl-pt-text, '');
+    font-family: var(--swtl-pt-font, system-ui, sans-serif);
+    z-index: 2147483000;
+  }
+  #swtl-pt-panel {
+    z-index: 2147483001;
+    font-family: var(--swtl-pt-font, inherit);
+    transform: translateY(100%);
+    will-change: transform;
+  }
+  #swtl-pt-panel.swtl-pt-leaving { pointer-events: none; }
+  #swtl-pt-panel .swtl-pt-label {
+    max-width: 80vw; text-align: center;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  @keyframes swtl-pt-label-in  { from { opacity: 0; transform: translateY(var(--swtl-pt-rise, 12px)); } }
+  @keyframes swtl-pt-label-out { to   { opacity: 0; } }
+</style>
+
+<script>
+(function () {
+  'use strict';
+
+  /* ---------------- CONFIG ----------------
+     Optional: define window.SwtlPageTransition = { ... } ABOVE this
+     snippet to override any value without editing the code below.  */
+  var C = {
+    label: 'link',     /* 'link' = clicked link's text · 'none' · or a fixed word, e.g. 'Studio' */
+    speed: 1,          /* 1 = default timing, 1.25 = 25% faster */
+    maxWait: 2500,     /* ms — next page: reveal by now even if HTML is still parsing */
+    stuckAfter: 6000,  /* ms — this page: drop the panel if no navigation happened */
+    ignore: ''         /* extra CSS selector of links to leave alone */
+  };
+  var user = window.SwtlPageTransition || {};
+  for (var key in user) { if (Object.prototype.hasOwnProperty.call(user, key)) C[key] = user[key]; }
+  /* ----------------------------------------- */
+
+  /* timing (s) — mirrored exactly by the video scene (timing.py) */
+  var T = __TIMING__;
+  var EASE = '__EASE_WIPE__', EASE_LABEL = '__EASE_LABEL__';
+
+  /* Never run inside the Squarespace editor (the site loads in a frame). */
+  var framed = true;
+  try { framed = window.self !== window.top; } catch (e) {}
+  if (framed || C.enabled === false) return;
+
+  var KEY = 'swtlPtCover';
+  var SKIP_PATH = /^\/(cart|checkout|commerce|account|config)(\/|$)|^\/s\//i;
+  var FILE = /\.(jpe?g|png|gif|webp|avif|svg|pdf|zip|mp3|mp4|mov)$/i;
+  var root = document.documentElement;
+  var s = 1 / (C.speed > 0 ? C.speed : 1);
+  var panel = null, busy = false, pending = null, revealed = false, gen = 0;
+
+  function ms(sec) { return Math.round(sec * s * 1000); }
+  function reduced() { return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches); }
+  function editing() {
+    var b = document.body;
+    return !!b && (b.classList.contains('sqs-edit-mode-active') || b.classList.contains('sqs-is-page-editing'));
+  }
+  function store(v) { try { if (v) sessionStorage.setItem(KEY, v); else sessionStorage.removeItem(KEY); } catch (e) {} }
+  function strip(u) { return String(u).split('#')[0]; }
+
+  function makePanel(text, covered) {
+    var el = document.createElement('div');
+    el.id = 'swtl-pt-panel';
+    el.setAttribute('aria-hidden', 'true');
+    if (covered) el.style.transform = 'none';
+    if (text) {
+      var l = document.createElement('div');
+      l.className = 'swtl-pt-label';
+      l.textContent = text;
+      el.appendChild(l);
+    }
+    document.body.appendChild(el);
+    return el;
+  }
+  function drop(el) { if (el && el.parentNode) el.parentNode.removeChild(el); if (panel === el) panel = null; }
+  function teardown() {
+    root.classList.remove('swtl-pt-cover');
+    root.style.removeProperty('--swtl-pt-text');
+    drop(panel);
+    busy = false;
+  }
+
+  /* ---------- arriving: cover from first paint, wipe off on DOMContentLoaded ---------- */
+  try {
+    var raw = sessionStorage.getItem(KEY);
+    if (raw) {
+      sessionStorage.removeItem(KEY);
+      pending = JSON.parse(raw);
+      /* only cover a navigation this script started, seconds ago (a redirect still counts) */
+      if (!pending || !(Date.now() - pending.t < 10000) || reduced()) pending = null;
+    }
+  } catch (e) { pending = null; }
+  if (pending) {
+    if (pending.l) root.style.setProperty('--swtl-pt-text', '"' + String(pending.l).replace(/["\\]/g, '\\$&') + '"');
+    root.classList.add('swtl-pt-cover');
+  }
+
+  function reveal() {
+    if (!pending || revealed) return;
+    revealed = true;
+    if (!document.body || editing()) { teardown(); return; }
+    try {
+      var el = panel = makePanel(pending.l, true);
+      root.classList.remove('swtl-pt-cover');
+      root.style.removeProperty('--swtl-pt-text');
+      void el.offsetWidth;                         /* commit the covered state */
+      el.classList.add('swtl-pt-leaving');
+      el.style.transition = 'transform ' + T.OUT_DUR * s + 's ' + EASE + ' ' + T.HOLD * s + 's';
+      el.style.transform = 'translateY(-100%)';
+      if (el.firstChild) el.firstChild.style.animation = 'swtl-pt-label-out ' + T.LABEL_OUT_DUR * s + 's linear ' + T.HOLD * s + 's forwards';
+      setTimeout(function () { drop(el); }, ms(T.HOLD + T.OUT_DUR) + 60);
+    } catch (e) { teardown(); }
+  }
+  if (pending) {
+    document.addEventListener('DOMContentLoaded', reveal);
+    setTimeout(reveal, C.maxWait);                 /* fail-safe */
+  }
+
+  /* ---------- leaving: which clicks get the wipe ---------- */
+  function inLightbox(a) {
+    for (var el = a; el && el !== document.body; el = el.parentElement) {
+      var cn = typeof el.className === 'string' ? el.className : '';
+      if (el.hasAttribute('data-lightbox') || /lightbox|gallery/i.test(cn)) return true;
+    }
+    return false;
+  }
+  function hit(e) {
+    if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return null;
+    if (reduced() || editing()) return null;
+    var a = e.target && e.target.closest ? e.target.closest('a[href]') : null;
+    if (!a || typeof a.href !== 'string' || a.hasAttribute('download') || a.closest('[data-swtl-pt="off"]')) return null;
+    var tg = a.getAttribute('target');
+    if (tg && tg.toLowerCase() !== '_self') return null;
+    if ((C.ignore && a.closest(C.ignore)) || inLightbox(a)) return null;
+    var u = new URL(a.href, location.href);
+    if (!/^https?:$/.test(u.protocol) || u.origin !== location.origin) return null;
+    if (SKIP_PATH.test(u.pathname) || FILE.test(u.pathname)) return null;
+    if (u.hash && strip(u.href) === strip(location.href)) return null;   /* same-page anchor */
+    return a;
+  }
+  function labelFor(a) {
+    if (C.label === 'none' || C.label === false) return '';
+    var t = a.getAttribute('data-swtl-pt-label') || (C.label === 'link' ? a.textContent : C.label);
+    t = String(t || '').replace(/\s+/g, ' ').trim();
+    return t.length > 40 ? t.slice(0, 39) + '…' : t;
+  }
+
+  function leave(a) {
+    var url = a.href, text = '', gone = false, my = ++gen;
+    busy = true;
+    function go(e) {
+      if (gone || (e && e.target !== panel)) return;
+      gone = true;
+      store(JSON.stringify({ t: Date.now(), l: text }));
+      /* no navigation by stuckAfter (download, 204, blocked)? give the page back */
+      setTimeout(function () { if (gen === my) { store(''); teardown(); } }, C.stuckAfter);
+      location.assign(url);
+    }
+    try {
+      text = labelFor(a);
+      drop(panel);
+      var el = panel = makePanel(text, false);
+      void el.offsetWidth;
+      el.style.transition = 'transform ' + T.IN_DUR * s + 's ' + EASE;
+      el.style.transform = 'translateY(0)';
+      el.style.setProperty('--swtl-pt-rise', T.LABEL_RISE + 'px');
+      if (el.firstChild) el.firstChild.style.animation = 'swtl-pt-label-in ' + T.LABEL_IN_DUR * s + 's ' + EASE_LABEL + ' ' + T.LABEL_IN_AT * s + 's both';
+      el.addEventListener('transitionend', go);
+      setTimeout(go, ms(T.IN_DUR + T.NAV_GRACE));   /* never wait on transitionend */
+    } catch (err) { go(); }
+  }
+
+  document.addEventListener('click', function (e) {
+    var a = null;
+    try { a = hit(e); } catch (err) { a = null; }
+    if (!a) return;                                /* plain browser navigation */
+    e.preventDefault();
+    if (!busy) leave(a);                           /* double click: ignore the second */
+  });
+
+  /* Back/Forward from the bfcache restores the page as it was left: covered. */
+  window.addEventListener('pageshow', function (e) {
+    if (e.persisted) { gen++; store(''); teardown(); }
+  });
+
+  /* Entering edit mode mid-transition: remove everything we added. */
+  function watch() {
+    if (!window.MutationObserver || !document.body) return;
+    new MutationObserver(function () { if (editing()) teardown(); })
+      .observe(document.body, { attributes: true, attributeFilter: ['class'] });
+  }
+  if (document.body) watch();
+  else document.addEventListener('DOMContentLoaded', watch);
+})();
+</script>
+<!-- ============ end SWTL page transition wipe ============ -->

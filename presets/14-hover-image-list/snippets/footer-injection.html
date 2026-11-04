@@ -1,0 +1,217 @@
+<!-- SWTL MOTION · 14 HOVER IMAGE REVEAL LIST v1.0.0 · Code Injection → FOOTER
+     + marker Code Block per section. Docs: presets/14-hover-image-list/INSTALL.md -->
+<style>
+  html.swtl-hl-on .swtl-hl-img { visibility: hidden !important; pointer-events: none !important; }
+  .swtl-hl-row { margin: 0 !important; border-top: 1px solid var(--swtl-hl-line, rgba(31,30,28,.18)); transition: opacity .35s ease; }
+  .swtl-hl-row:last-child { border-bottom: 1px solid var(--swtl-hl-line, rgba(31,30,28,.18)); }
+  .swtl-hl-link { display: flex !important; align-items: center; gap: .4em; padding: var(--swtl-hl-pad, .3em) 0;
+    color: inherit; text-decoration: none !important; background: none !important; }
+  .swtl-hl-big .swtl-hl-link { font-size: var(--swtl-hl-size, clamp(30px, 5vw, 64px)); font-weight: var(--swtl-hl-weight, 600);
+    line-height: 1.08; letter-spacing: -.02em; }
+  .swtl-hl-arrow { margin-left: auto; display: inline-flex; flex: none;
+    transition: transform .35s cubic-bezier(.22,1,.36,1), color .35s ease; }
+  .swtl-hl-arrow svg { width: var(--swtl-hl-arrow, .62em); height: var(--swtl-hl-arrow, .62em); display: block; }
+  .swtl-hl-link:hover .swtl-hl-arrow, .swtl-hl-link:focus-visible .swtl-hl-arrow, .swtl-hl-cur .swtl-hl-arrow {
+    transform: translateX(5px); color: var(--swtl-accent, #D4552B); }
+  .swtl-hl-dim .swtl-hl-row:not(.swtl-hl-cur) { opacity: var(--swtl-hl-dim, .3); }
+  .swtl-hl-float { position: fixed; left: 0; top: 0; z-index: 9999; pointer-events: none;
+    width: var(--swtl-hl-w, 340px); aspect-ratio: var(--swtl-hl-ratio, 4 / 3); will-change: transform; }
+  .swtl-hl-frame { position: absolute; inset: 0; overflow: hidden; border-radius: var(--swtl-hl-radius, 4px);
+    background: var(--swtl-ink, #1F1E1C); opacity: 0; transform: scale(.82); clip-path: inset(100% 0 0 0);
+    transition: clip-path .55s cubic-bezier(.22,1,.36,1), transform .55s cubic-bezier(.22,1,.36,1), opacity .3s ease; }
+  .swtl-hl-show .swtl-hl-frame { opacity: 1; transform: none; clip-path: inset(0 0 0 0); }
+  .swtl-hl-frame img, .swtl-hl-thumb img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+  .swtl-hl-frame img { opacity: 0; transform: scale(1.12); transition: opacity .35s ease, transform .7s cubic-bezier(.22,1,.36,1); }
+  .swtl-hl-frame img.swtl-hl-cur { opacity: 1; transform: none; }
+  .swtl-hl-thumb { position: relative; flex: none; overflow: hidden; border-radius: 3px;
+    width: var(--swtl-hl-thumb, 64px); aspect-ratio: 4 / 3; background: var(--swtl-ink, #1F1E1C); }
+  @media (prefers-reduced-motion: reduce) {
+    .swtl-hl-frame, .swtl-hl-frame img { transform: none !important; clip-path: none !important; transition: opacity .25s ease !important; }
+  }
+</style>
+
+<script>
+(function () {
+  'use strict';
+
+  /* CONFIG — override with window.SwtlHoverList = {...} above this snippet,
+     or per section with data-* attributes on the marker. */
+  var C = {
+    source: 1,         /* which Text Block in the section holds the links */
+    bigType: true,     /* large row type (false = keep the Text Block's own style) */
+    dim: true,         /* fade the rows you are not on */
+    ease: 0.14,        /* follow speed per frame, 0.05 (lazy) to 0.4 (tight) */
+    tilt: 0.35,        /* degrees of tilt per px/frame of speed */
+    maxTilt: 8,
+    breakpoint: 768    /* below this, or on touch screens: inline thumbnails */
+  };
+  var user = window.SwtlHoverList || {};
+  for (var key in user) { if (Object.prototype.hasOwnProperty.call(user, key)) C[key] = user[key]; }
+
+  var framed = true;
+  try { framed = window.self !== window.top; } catch (e) {}
+  if (framed) return;
+
+  var ARROW = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13.5 4.5 21 12m0 0-7.5 7.5M21 12H3"/></svg>';
+  var body = document.body, root = document.documentElement, lists = [];
+  var reduced = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+  var mq = window.matchMedia('(hover: hover) and (pointer: fine) and (min-width: ' + C.breakpoint + 'px)');
+
+  function editing() {
+    return body.classList.contains('sqs-edit-mode-active') || body.classList.contains('sqs-is-page-editing');
+  }
+  function opt(m, name, d) {
+    var v = m.getAttribute('data-' + name);
+    if (v === null || v === '') return d;
+    if (v === 'true' || v === 'false') return v === 'true';
+    return typeof d === 'number' ? (isNaN(parseFloat(v)) ? d : parseFloat(v)) : v;
+  }
+  function el(tag, cls, html) { var e = document.createElement(tag); e.className = cls; if (html) e.innerHTML = html; return e; }
+  function srcOf(img) {
+    var s = img.currentSrc || img.getAttribute('src') || '';
+    if (!s || s.indexOf('data:') === 0) {
+      s = img.getAttribute('data-src') || s;
+      if (s && s.indexOf('?') < 0 && s.indexOf('data:') !== 0) s += '?format=1000w';
+    }
+    return s;
+  }
+  function pic(src) { var i = document.createElement('img'); i.src = src; i.alt = ''; i.decoding = 'async'; return i; }
+
+  function build(m) {
+    var sec = m.closest('section.page-section');
+    if (!sec) return;
+    var src = sec.querySelectorAll('.sqs-block.html-block')[(opt(m, 'source', C.source) | 0) - 1];
+    var list = src && src.querySelector('.sqs-html-content');
+    if (!list) return;
+    var links = list.querySelectorAll('a[href]');
+    if (!links.length) return;
+    var s = { ease: opt(m, 'ease', C.ease), tilt: opt(m, 'tilt', C.tilt), maxTilt: opt(m, 'max-tilt', C.maxTilt) };
+    var follow = mq.matches && !reduced, hover = mq.matches;
+    var L = { list: list, rows: [], added: [], marks: [], on: [], float: null };
+    L.marks.push([list, 'swtl-hl-list' + (opt(m, 'big-type', C.bigType) ? ' swtl-hl-big' : '') + (hover ? ' swtl-hl-hover' : ' swtl-hl-touch')]);
+
+    /* image blocks: one with the same click-through link pairs first, the rest in order */
+    var blocks = [].slice.call(sec.querySelectorAll('.sqs-block.image-block')).filter(function (b) { return b.querySelector('img'); });
+    var pair = [], free = blocks.slice(), i, j;
+    for (i = 0; i < links.length; i++) {
+      pair[i] = null;
+      for (j = 0; j < free.length; j++) {
+        var a = free[j].querySelector('a[href]');
+        if (a && a.getAttribute('href') === links[i].getAttribute('href')) { pair[i] = free.splice(j, 1)[0]; break; }
+      }
+    }
+    for (i = 0; i < links.length; i++) if (!pair[i]) pair[i] = free.shift() || null;
+
+    var fl, frame, imgs = [];
+    if (hover) {
+      fl = el('div', 'swtl-hl-float'); frame = el('div', 'swtl-hl-frame');
+      fl.setAttribute('aria-hidden', 'true'); fl.appendChild(frame); body.appendChild(fl);
+      L.float = fl;
+    }
+    for (i = 0; i < links.length; i++) {
+      var ln = links[i], p = ln.parentNode;
+      var row = p !== list && p.querySelectorAll('a[href]').length === 1 ? p : ln;
+      var b = pair[i], url = b ? srcOf(b.querySelector('img')) : '';
+      L.marks.push([row, 'swtl-hl-row'], [ln, 'swtl-hl-link']);
+      if (b) L.marks.push([b.closest('.fe-block') || b, 'swtl-hl-img']);
+      var ar = el('span', 'swtl-hl-arrow', ARROW); ln.appendChild(ar); L.added.push(ar);
+      if (url && hover) { imgs[i] = pic(url); frame.appendChild(imgs[i]); }
+      if (url && !hover) {
+        var th = el('span', 'swtl-hl-thumb'); th.setAttribute('aria-hidden', 'true');
+        th.appendChild(pic(url)); ln.insertBefore(th, ln.firstChild); L.added.push(th);
+      }
+      L.rows.push(row);
+    }
+    for (i = 0; i < L.marks.length; i++) { var mk = L.marks[i]; mk[2] = mk[0].hasAttribute('class'); mk[0].className += ' ' + mk[1]; }
+    lists.push(L);
+    if (!hover) return;
+
+    var x = 0, y = 0, tx = 0, ty = 0, rot = 0, raf = 0, shown = false, hidAt = -1e9, cur = -1;
+    function place() {
+      fl.style.transform = 'translate3d(' + (x - fl.offsetWidth / 2).toFixed(1) + 'px,' + (y - fl.offsetHeight / 2).toFixed(1) + 'px,0) rotate(' + rot.toFixed(2) + 'deg)';
+    }
+    function loop() {
+      var dx = (tx - x) * s.ease, dy = (ty - y) * s.ease;
+      x += dx; y += dy;
+      var want = Math.max(-s.maxTilt, Math.min(s.maxTilt, dx * s.tilt));
+      rot += (want - rot) * 0.15;
+      place();
+      raf = (Math.abs(tx - x) + Math.abs(ty - y) > 0.4 || Math.abs(rot) > 0.05) ? requestAnimationFrame(loop) : 0;
+    }
+    function anchor(i) {           /* fixed spot for keyboard focus and reduced motion */
+      var r = L.rows[i].getBoundingClientRect(), w = fl.offsetWidth;
+      tx = r.left + r.width * 0.62 + w / 4; ty = r.top + r.height / 2;
+    }
+    function show(i, viaPointer) {
+      if (!follow || !viaPointer) anchor(i);
+      if (!follow || (!shown && Date.now() - hidAt > 600)) { x = tx; y = ty; rot = 0; place(); }
+      shown = true;
+      for (var k = 0; k < L.rows.length; k++) {
+        L.rows[k].classList.toggle('swtl-hl-cur', k === i);
+        if (imgs[k]) imgs[k].classList.toggle('swtl-hl-cur', k === i);
+      }
+      cur = i;
+      fl.classList.toggle('swtl-hl-show', !!imgs[i]);
+      if (opt(m, 'dim', C.dim)) list.classList.add('swtl-hl-dim');
+      if (follow && !raf) raf = requestAnimationFrame(loop);
+    }
+    function hide() {
+      if (!shown) return;
+      shown = false; hidAt = Date.now(); cur = -1;
+      fl.classList.remove('swtl-hl-show'); list.classList.remove('swtl-hl-dim');
+      for (var k = 0; k < L.rows.length; k++) L.rows[k].classList.remove('swtl-hl-cur');
+    }
+    function on(t, type, fn) { t.addEventListener(type, fn); L.on.push([t, type, fn]); }
+    L.rows.forEach(function (row, i) {
+      on(row, 'mouseenter', function (e) { tx = e.clientX; ty = e.clientY; show(i, true); });
+      on(links[i], 'focus', function () { show(i, false); });
+    });
+    on(list, 'mousemove', function (e) {
+      if (!follow) return;
+      tx = e.clientX; ty = e.clientY;
+      if (shown && !raf) raf = requestAnimationFrame(loop);
+    });
+    on(list, 'mouseleave', function () { if (!list.contains(document.activeElement)) hide(); });
+    on(list, 'focusout', function (e) { if (!e.relatedTarget || !list.contains(e.relatedTarget)) hide(); });
+    on(window, 'scroll', function () {   /* keep a pinned image on its row */
+      if (shown && (!follow || list.contains(document.activeElement))) { anchor(cur); x = tx; y = ty; place(); }
+    });
+    L.stop = function () { cancelAnimationFrame(raf); };
+  }
+
+  function init() {
+    if (lists.length || editing()) return;
+    var ms = document.querySelectorAll('[data-swtl-hoverlist]');
+    for (var i = 0; i < ms.length; i++) build(ms[i]);
+    if (lists.length) root.classList.add('swtl-hl-on');
+  }
+
+  function teardown() {
+    for (var i = 0; i < lists.length; i++) {
+      var L = lists[i], j;
+      if (L.stop) L.stop();
+      for (j = 0; j < L.on.length; j++) L.on[j][0].removeEventListener(L.on[j][1], L.on[j][2]);
+      for (j = 0; j < L.added.length; j++) if (L.added[j].parentNode) L.added[j].parentNode.removeChild(L.added[j]);
+      if (L.float && L.float.parentNode) L.float.parentNode.removeChild(L.float);
+      L.list.classList.remove('swtl-hl-dim');
+      for (j = 0; j < L.rows.length; j++) L.rows[j].classList.remove('swtl-hl-cur');
+      for (j = 0; j < L.marks.length; j++) {
+        var e = L.marks[j][0];
+        e.classList.remove.apply(e.classList, L.marks[j][1].split(' '));
+        if (!L.marks[j][2] && !e.className.trim()) e.removeAttribute('class');
+      }
+    }
+    lists = [];
+    root.classList.remove('swtl-hl-on');
+  }
+
+  new MutationObserver(function () {
+    if (editing()) teardown(); else if (!lists.length) init();
+  }).observe(body, { attributes: true, attributeFilter: ['class'] });
+  var flip = function () { if (!editing()) { teardown(); init(); } };
+  if (mq.addEventListener) mq.addEventListener('change', flip); else if (mq.addListener) mq.addListener(flip);
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
+})();
+</script>
+<!-- end SWTL hover image list -->

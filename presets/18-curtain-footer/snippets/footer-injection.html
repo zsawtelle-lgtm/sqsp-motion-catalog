@@ -1,0 +1,179 @@
+<!-- ==========================================================
+     SWTL MOTION · 18 CURTAIN FOOTER REVEAL        v1.0.0
+     Paste into: Settings → Developer Tools → Code Injection → FOOTER
+     Sitewide. No marker. The footer (footer#footer-sections) sits
+     fixed behind the page; the page scrolls up off it like a curtain.
+     Docs: presets/18-curtain-footer/INSTALL.md
+     ========================================================== -->
+
+<style>
+  /* Every rule needs a class the script adds. If the script is skipped
+     or fails, the footer stays in normal flow. */
+  .swtl-cf-page {
+    position: relative;
+    z-index: var(--swtl-cf-z, 1);
+    background: var(--swtl-cf-bg, var(--swtl-paper, #F4F1EA));
+    box-shadow: var(--swtl-cf-shadow, 0 28px 56px -18px rgba(0, 0, 0, .38));
+    border-radius: 0 0 var(--swtl-cf-radius, 24px) var(--swtl-cf-radius, 24px);
+  }
+  /* clip (not hidden): rounds the section corners, keeps sticky working */
+  @supports (overflow: clip) { .swtl-cf-page.swtl-cf-round { overflow: clip; } }
+  .swtl-cf-footer {
+    position: fixed !important;
+    left: 0; right: 0; bottom: 0;
+    z-index: calc(var(--swtl-cf-z, 1) - 1);
+  }
+  .swtl-cf-footer .page-section > .content-wrapper {
+    transform: translate3d(0, var(--swtl-cf-y, 0px), 0);
+    opacity: var(--swtl-cf-o, 1);
+  }
+  .swtl-cf-header { z-index: calc(var(--swtl-cf-z, 1) + 1) !important; }
+  .swtl-cf-spacer { display: block; pointer-events: none; }
+</style>
+
+<script>
+(function () {
+  'use strict';
+
+  /* CONFIG — override with window.SwtlCurtainFooter = {…} above this snippet. */
+  var C = {
+    radius: 24,             /* px, bottom corners of the page (0 = square) */
+    shadow: '0 28px 56px -18px rgba(0,0,0,.38)',  /* CSS box-shadow, or 'none' */
+    maxFooterRatio: 0.85,   /* skip when footer is taller than this share of the screen */
+    parallax: 60,           /* px the footer content rises while revealed (0 = off) */
+    fade: 0.35,             /* footer content opacity at the start of the reveal */
+    background: 'auto',     /* page color behind sections; 'auto' = read from the site */
+    zIndex: 1,              /* page layer; the footer sits one below */
+    footer: '#footer-sections',
+    page: '#page'
+  };
+  var user = window.SwtlCurtainFooter || {};
+  for (var key in user) { if (Object.prototype.hasOwnProperty.call(user, key)) C[key] = user[key]; }
+
+  var framed = true;
+  try { framed = window.self !== window.top; } catch (e) {}
+  if (framed) return;
+
+  var EDIT = ['sqs-edit-mode-active', 'sqs-is-page-editing'];
+  var root = document.documentElement;
+  var rm = window.matchMedia ? window.matchMedia('(prefers-reduced-motion: reduce)') : null;
+  var foot, page, head, spacer = null, ro = null, on = false, raf = 0, broken = false, fh = 0;
+
+  function num(v, d) { v = parseFloat(v); return isNaN(v) ? d : v; }
+  function clamp(x) { return x < 0 ? 0 : x > 1 ? 1 : x; }
+  function motion() { return C.parallax > 0 && !(rm && rm.matches); }
+  function editing() {
+    for (var i = 0; i < EDIT.length; i++) if (document.body.classList.contains(EDIT[i])) return true;
+    return false;
+  }
+  function fits() { return foot.offsetHeight > 0 && foot.offsetHeight <= window.innerHeight * num(C.maxFooterRatio, 0.85); }
+  function wanted() { return !broken && !editing() && fits(); }
+
+  function opaque(el) {
+    if (!el) return '';
+    var c = window.getComputedStyle(el).backgroundColor;
+    return c && c !== 'transparent' && !/rgba\(.*,\s*0\)$/.test(c) ? c : '';
+  }
+  function siteBackground() {
+    if (C.background !== 'auto') return C.background;
+    var last = page.querySelectorAll('section.page-section > .section-background');
+    return opaque(document.body) || opaque(document.getElementById('siteWrapper')) || opaque(root) ||
+           opaque(last[last.length - 1]) || '';
+  }
+
+  function size() {
+    fh = foot.offsetHeight;
+    if (spacer) spacer.style.height = fh + 'px';   /* our own element only */
+  }
+
+  function frame() {
+    raf = 0;
+    if (!on || !motion()) return;
+    var shown = window.innerHeight - spacer.getBoundingClientRect().top;
+    var p = clamp(shown / Math.max(1, fh));
+    foot.style.setProperty('--swtl-cf-y', ((1 - p) * C.parallax).toFixed(1) + 'px');
+    foot.style.setProperty('--swtl-cf-o', (C.fade + (1 - C.fade) * p).toFixed(3));
+  }
+  function request() { if (!raf) raf = window.requestAnimationFrame(frame); }
+
+  function enable() {
+    var bg = siteBackground();
+    if (bg) root.style.setProperty('--swtl-cf-bg', bg);
+    root.style.setProperty('--swtl-cf-z', String(parseInt(C.zIndex, 10) || 1));
+    root.style.setProperty('--swtl-cf-radius', num(C.radius, 0) + 'px');
+    root.style.setProperty('--swtl-cf-shadow', C.shadow || 'none');
+    spacer = document.createElement('div');
+    spacer.className = 'swtl-cf-spacer';
+    spacer.setAttribute('aria-hidden', 'true');
+    page.parentNode.insertBefore(spacer, page.nextSibling);
+    page.classList.add('swtl-cf-page');
+    if (num(C.radius, 0) > 0) page.classList.add('swtl-cf-round');
+    foot.classList.add('swtl-cf-footer');
+    /* a positioned header with no z-index would slide under the page */
+    if (head) {
+      var hs = window.getComputedStyle(head);
+      if (hs.position !== 'static' && (hs.zIndex === 'auto' || parseInt(hs.zIndex, 10) <= (parseInt(C.zIndex, 10) || 1)))
+        head.classList.add('swtl-cf-header');
+    }
+    on = true;
+    size();
+    /* a transformed ancestor turns fixed into absolute: give up cleanly */
+    if (Math.abs(foot.getBoundingClientRect().bottom - window.innerHeight) > 2) { broken = true; disable(); return; }
+    frame();
+    window.addEventListener('scroll', request, { passive: true });
+  }
+
+  function disable() {
+    on = false;
+    if (raf) window.cancelAnimationFrame(raf);
+    raf = 0;
+    window.removeEventListener('scroll', request);
+    if (spacer && spacer.parentNode) spacer.parentNode.removeChild(spacer);
+    spacer = null;
+    page.classList.remove('swtl-cf-page', 'swtl-cf-round');
+    foot.classList.remove('swtl-cf-footer');
+    if (head) head.classList.remove('swtl-cf-header');
+    var props = ['--swtl-cf-bg', '--swtl-cf-z', '--swtl-cf-radius', '--swtl-cf-shadow'];
+    for (var i = 0; i < props.length; i++) root.style.removeProperty(props[i]);
+    foot.style.removeProperty('--swtl-cf-y');
+    foot.style.removeProperty('--swtl-cf-o');
+    var els = [root, foot];
+    for (i = 0; i < els.length; i++) if (els[i].getAttribute('style') === '') els[i].removeAttribute('style');
+  }
+
+  function sync() {
+    var w = wanted();
+    if (w && !on) enable();
+    else if (!w && on) disable();
+    else if (on) { size(); request(); }
+  }
+
+  function watch() {
+    if (ro || !('ResizeObserver' in window)) return;
+    ro = new ResizeObserver(function () { if (!editing()) sync(); });
+    ro.observe(foot);
+  }
+  function onEdit() {
+    if (editing()) { disable(); if (ro) { ro.disconnect(); ro = null; } }
+    else { watch(); sync(); }
+  }
+
+  function init() {
+    foot = document.querySelector(C.footer);
+    page = document.querySelector(C.page);
+    head = document.querySelector('#header, header.header');
+    if (!foot || !page || page.contains(foot)) return;
+    if (!editing()) { watch(); sync(); }
+    new MutationObserver(onEdit).observe(document.body, { attributes: true, attributeFilter: ['class'] });
+    window.addEventListener('resize', function () { broken = false; if (!editing()) sync(); });
+    if (rm) {
+      var reset = function () { if (on) { foot.style.removeProperty('--swtl-cf-y'); foot.style.removeProperty('--swtl-cf-o'); request(); } };
+      if (rm.addEventListener) rm.addEventListener('change', reset); else if (rm.addListener) rm.addListener(reset);
+    }
+  }
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+  else init();
+})();
+</script>
+<!-- ============ end SWTL curtain footer reveal ============ -->

@@ -1,0 +1,289 @@
+<!-- ==========================================================
+     SWTL MOTION · 17 MARKER HIGHLIGHT & UNDERLINE DRAW   v1.0.0
+     Paste into: Settings → Developer Tools → Code Injection → FOOTER
+     Then add a Code Block holding
+       <div data-swtl-marker data-style="highlight" hidden></div>
+     to every section that should get marks. Italic words (or bold,
+     with data-target="strong") get the mark as they scroll in.
+     Docs: presets/17-marker-highlight/INSTALL.md
+     ========================================================== -->
+<style>
+  /* Hidden states apply only after the script adds html.swtl-mh-on. */
+  .swtl-mh-hl {
+    background-image: linear-gradient(rgba(212, 85, 43, .38), rgba(212, 85, 43, .38));
+    background-image: linear-gradient(var(--swtl-mh-band, color-mix(in srgb, var(--swtl-accent, #D4552B) 38%, transparent)), var(--swtl-mh-band, color-mix(in srgb, var(--swtl-accent, #D4552B) 38%, transparent)));
+    background-repeat: no-repeat;
+    background-position: 0 88%;
+    background-size: 100% var(--swtl-mh-height, 35%);
+    -webkit-box-decoration-break: clone;
+    box-decoration-break: clone;
+    padding: 0 .06em;
+    margin: 0 -.06em;
+  }
+  html.swtl-mh-on .swtl-mh-hl:not(.swtl-mh-done) { background-size: 0% var(--swtl-mh-height, 35%); }
+  html.swtl-mh-on .swtl-mh-hl.swtl-mh-go:not(.swtl-mh-done) {
+    animation: swtl-mh-band var(--swtl-mh-dur, .8s) cubic-bezier(.7, 0, .2, 1) both;
+  }
+  @keyframes swtl-mh-band { from { background-size: 0% var(--swtl-mh-height, 35%); } to { background-size: 100% var(--swtl-mh-height, 35%); } }
+
+  .swtl-mh-svg {
+    position: absolute; left: 0; top: 0; width: 100%; height: 100%;
+    overflow: visible; pointer-events: none; z-index: 1;
+  }
+  .swtl-mh-path {
+    fill: none; stroke: var(--swtl-mh-color, var(--swtl-accent, #D4552B));
+    stroke-linecap: round; stroke-linejoin: round;
+    stroke-dasharray: var(--swtl-mh-len) var(--swtl-mh-len);
+  }
+  html.swtl-mh-on .swtl-mh-path:not(.swtl-mh-done) { stroke-dashoffset: var(--swtl-mh-len); }
+  html.swtl-mh-on .swtl-mh-path.swtl-mh-go:not(.swtl-mh-done) {
+    animation: swtl-mh-draw var(--swtl-mh-dur, .8s) cubic-bezier(.7, 0, .2, 1) both;
+  }
+  @keyframes swtl-mh-draw { from { stroke-dashoffset: var(--swtl-mh-len); } to { stroke-dashoffset: 0; } }
+
+  em.swtl-mh-plain { font-style: normal; }
+  strong.swtl-mh-plain, b.swtl-mh-plain { font-weight: inherit; }
+</style>
+
+<script>
+(function () {
+  'use strict';
+
+  /* ---------------- CONFIG ----------------
+     Optional: define window.SwtlMarker = { ... } ABOVE this snippet.
+     Per section: data-* on the marker wins (data-style, data-target,
+     data-duration, data-stagger). Comma lists pair up:
+     data-target="em, strong" data-style="underline, circle".          */
+  var C = {
+    style: 'highlight',    /* highlight | underline | circle */
+    target: 'em',          /* em (italic) or strong (bold) */
+    selector: 'h1, h2, h3, h4, p',
+    duration: 0.8,         /* s per mark (circle draws 1.15x) */
+    stagger: 0.25,         /* s between marks in a section */
+    delay: 0.15,           /* s after the word enters view */
+    weight: 0.08,          /* stroke width × the word's font size */
+    circleMax: 16,         /* longer or wrapped → underline instead */
+    keepItalic: true,      /* false = marked words lose italic/bold look */
+    rootMargin: '0px 0px -15% 0px'
+  };
+  var user = window.SwtlMarker || {};
+  for (var key in user) { if (Object.prototype.hasOwnProperty.call(user, key)) C[key] = user[key]; }
+  /* ----------------------------------------- */
+
+  var framed = true;
+  try { framed = window.self !== window.top; } catch (e) {}
+  if (framed || !('IntersectionObserver' in window)) return;
+  var reduced = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+
+  var root = document.documentElement, body = document.body, NS = 'http://www.w3.org/2000/svg';
+  var EDIT = /\b(sqs-edit-mode-active|sqs-is-page-editing)\b/;
+  var items = [], svgs = [], timers = [], io = null, active = false, rz = 0;
+
+  function opt(mk, name, fb) {
+    var v = mk.getAttribute('data-' + name);
+    if (v === null || v === '') return fb;
+    return typeof fb === 'number' ? parseFloat(v) : v;
+  }
+  function list(s) { return String(s).toLowerCase().split(/\s*,\s*/); }
+  function f(p) { return p[0].toFixed(1) + ',' + p[1].toFixed(1); }
+
+  /* Catmull-Rom through the points → smooth cubic path */
+  function smooth(p) {
+    var d = 'M' + f(p[0]);
+    for (var i = 0; i < p.length - 1; i++) {
+      var a = p[i - 1] || p[i], b = p[i], c = p[i + 1], e = p[i + 2] || c;
+      d += 'C' + f([b[0] + (c[0] - a[0]) / 6, b[1] + (c[1] - a[1]) / 6]) + ' ' +
+        f([c[0] - (e[0] - b[0]) / 6, c[1] - (e[1] - b[1]) / 6]) + ' ' + f(c);
+    }
+    return d;
+  }
+  /* one line of underline; the last line gets a return flick (swoosh) */
+  function underline(r, last) {
+    var x = r.x, w = r.w, h = r.h, y = r.y + h * 0.9;
+    var p = [[x - h * .08, y + h * .03], [x + w * .35, y - h * .02], [x + w * .7, y + h * .02], [x + w + h * .12, y - h * .04]];
+    if (last) p.push([x + w * .62, y + h * .09], [x + w * .2, y + h * .13]);
+    return smooth(p);
+  }
+  /* rough loop: 1.12 turns, slight tilt and growing radius so the ends cross */
+  function circle(r) {
+    var cx = r.x + r.w / 2, cy = r.y + r.h * .52, rx = r.w / 2 + r.h * .32, ry = r.h * .62;
+    var p = [], n = 26, tilt = -0.07, ct = Math.cos(tilt), st = Math.sin(tilt);
+    for (var i = 0; i <= n; i++) {
+      var t = i / n, a = -2.5 + Math.PI * 2 * 1.12 * t, k = 0.97 + 0.07 * t + 0.03 * Math.sin(t * 9);
+      var dx = Math.cos(a) * rx * k, dy = Math.sin(a) * ry * k;
+      p.push([cx + dx * ct - dy * st, cy + dx * st + dy * ct]);
+    }
+    return smooth(p);
+  }
+
+  /* line boxes of the word(s), relative to the overlay */
+  function lines(el, s) {
+    var rs = el.getClientRects(), out = [];
+    for (var i = 0; i < rs.length; i++) {
+      var r = rs[i];
+      if (r.width < 1) continue;
+      var o = out[out.length - 1];
+      if (o && Math.abs(o.t - r.top) < 2) { o.w = r.right - s.left - o.x; continue; }
+      out.push({ x: r.left - s.left, y: r.top - s.top, w: r.width, h: r.height, t: r.top });
+    }
+    return out;
+  }
+
+  function draw(it) {
+    var g = it.g;
+    while (g.firstChild) g.removeChild(g.firstChild);
+    it.paths = [];
+    var ls = lines(it.el, it.svg.getBoundingClientRect());
+    if (!ls.length) return;
+    var fs = parseFloat(getComputedStyle(it.el).fontSize) || 16;
+    var circ = it.style === 'circle' && ls.length === 1 && it.el.textContent.length <= C.circleMax;
+    var ds = circ ? [circle(ls[0])] : ls.map(function (r, i) { return underline(r, i === ls.length - 1); });
+    var lens = [], total = 0;
+    for (var i = 0; i < ds.length; i++) {
+      var p = document.createElementNS(NS, 'path');
+      p.setAttribute('d', ds[i]);
+      p.setAttribute('class', 'swtl-mh-path' + (it.started ? ' swtl-mh-done' : ''));
+      p.setAttribute('stroke-width', Math.max(2, fs * C.weight).toFixed(1));
+      g.appendChild(p);
+      var len = p.getTotalLength() + 2;
+      p.style.setProperty('--swtl-mh-len', len.toFixed(1));
+      lens.push(len); total += len;
+      it.paths.push(p);
+    }
+    it.lens = lens; it.total = total; it.circ = circ;
+  }
+
+  function overlay(host) {
+    for (var i = 0; i < svgs.length; i++) if (svgs[i].host === host) return svgs[i].svg;
+    var svg = document.createElementNS(NS, 'svg');
+    svg.setAttribute('class', 'swtl-mh-svg');
+    svg.setAttribute('aria-hidden', 'true');
+    svg.setAttribute('focusable', 'false');
+    host.appendChild(svg);
+    svgs.push({ host: host, svg: svg });
+    return svg;
+  }
+
+  function reveal(it) {
+    if (it.started) return;
+    it.started = true;
+    var now = performance.now() / 1000, sec = it.sec;
+    var start = Math.max(now + it.cfg.delay, sec.clock), dur = it.cfg.duration, at = start - now;
+    sec.clock = start + it.cfg.stagger;
+    if (it.style === 'highlight') {
+      it.el.style.animationDelay = at.toFixed(3) + 's';
+      it.el.style.setProperty('--swtl-mh-dur', dur + 's');
+      it.el.classList.add('swtl-mh-go');
+    } else {
+      if (it.circ) dur *= 1.15;
+      for (var i = 0; i < it.paths.length; i++) {
+        var d = dur * it.lens[i] / it.total, p = it.paths[i];
+        p.style.animationDelay = at.toFixed(3) + 's';
+        p.style.setProperty('--swtl-mh-dur', d.toFixed(3) + 's');
+        p.setAttribute('class', 'swtl-mh-path swtl-mh-go');
+        at += d;
+      }
+      dur = at - (start - now);
+    }
+    timers.push(setTimeout(function () { settle(it); }, (start - now + dur) * 1000 + 80));
+  }
+
+  function restoreStyle(el, s) {
+    el.getAttribute('style');   /* flush Chrome's lazy style attr, or removal leaves style="" */
+    if (s === null) el.removeAttribute('style'); else el.setAttribute('style', s);
+  }
+
+  function settle(it) {
+    if (it.style === 'highlight') { it.el.classList.add('swtl-mh-done'); restoreStyle(it.el, it.css); }
+    else for (var i = 0; i < it.paths.length; i++) it.paths[i].setAttribute('class', 'swtl-mh-path swtl-mh-done');
+  }
+
+  function init() {
+    if (active || EDIT.test(body.className)) return;
+    var markers = document.querySelectorAll('[data-swtl-marker]');
+    if (!markers.length) return;
+    active = true;
+    if (!reduced) root.classList.add('swtl-mh-on');
+    io = new IntersectionObserver(function (es) {
+      for (var i = 0; i < es.length; i++) {
+        if (!es[i].isIntersecting) continue;
+        io.unobserve(es[i].target);
+        reveal(es[i].target._swtlMh);
+      }
+    }, { rootMargin: C.rootMargin, threshold: 0 });
+
+    for (var m = 0; m < markers.length; m++) {
+      var mk = markers[m], section = mk.closest('section.page-section') || mk.closest('section');
+      if (!section) continue;
+      var cfg = { duration: opt(mk, 'duration', C.duration), stagger: opt(mk, 'stagger', C.stagger), delay: C.delay };
+      var tg = list(opt(mk, 'target', C.target)), st = list(opt(mk, 'style', C.style));
+      var sec = section._swtlMhSec || (section._swtlMhSec = { clock: 0 });
+      var texts = section.querySelectorAll('.sqs-html-content');
+      for (var b = 0; b < texts.length; b++) {
+        var hs = texts[b].querySelectorAll(C.selector);
+        for (var h = 0; h < hs.length; h++) {
+          for (var x = 0; x < tg.length; x++) {
+            var style = st[Math.min(x, st.length - 1)];
+            if (!/^(highlight|underline|circle)$/.test(style)) continue;
+            var els = hs[h].querySelectorAll(tg[x]);
+            for (var e = 0; e < els.length; e++) add(els[e], style, cfg, sec, texts[b]);
+          }
+        }
+      }
+    }
+    for (var i = 0; i < items.length; i++) {
+      if (items[i].style !== 'highlight') draw(items[i]);
+      if (reduced) { items[i].started = true; settle(items[i]); }
+      else io.observe(items[i].el);
+    }
+  }
+
+  function add(el, style, cfg, sec, text) {
+    if (el._swtlMh || !/\S/.test(el.textContent)) return;
+    for (var p = el.parentNode; p && p !== text; p = p.parentNode) if (p._swtlMh) return;
+    var it = { el: el, style: style, cfg: cfg, sec: sec, cls: el.getAttribute('class'), css: el.getAttribute('style') };
+    el._swtlMh = it;
+    if (!C.keepItalic) el.classList.add('swtl-mh-plain');
+    if (style === 'highlight') el.classList.add('swtl-mh-hl');
+    else {
+      var host = text.closest('.sqs-block') || text.parentNode;
+      it.svg = overlay(host);
+      it.g = document.createElementNS(NS, 'g');
+      it.svg.appendChild(it.g);
+    }
+    items.push(it);
+  }
+
+  function teardown() {
+    if (!active) return;
+    active = false;
+    if (io) io.disconnect();
+    for (var t = 0; t < timers.length; t++) clearTimeout(timers[t]);
+    timers = [];
+    for (var i = 0; i < items.length; i++) {
+      var it = items[i];
+      if (it.cls === null) it.el.removeAttribute('class'); else it.el.setAttribute('class', it.cls);
+      restoreStyle(it.el, it.css);
+      delete it.el._swtlMh;
+    }
+    for (var s = 0; s < svgs.length; s++) if (svgs[s].svg.parentNode) svgs[s].svg.parentNode.removeChild(svgs[s].svg);
+    var secs = document.querySelectorAll('section');
+    for (var k = 0; k < secs.length; k++) delete secs[k]._swtlMhSec;
+    items = []; svgs = [];
+    root.classList.remove('swtl-mh-on');
+  }
+
+  /* Geometry follows reflow: debounced on resize and once fonts load. */
+  function redraw() { for (var i = 0; i < items.length; i++) if (items[i].g) draw(items[i]); }
+  window.addEventListener('resize', function () { clearTimeout(rz); rz = setTimeout(redraw, 150); });
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(redraw);
+
+  /* Editor safety: tear down the moment edit mode starts, re-init after. */
+  new MutationObserver(function () {
+    if (EDIT.test(body.className)) teardown(); else init();
+  }).observe(body, { attributes: true, attributeFilter: ['class'] });
+
+  init();
+})();
+</script>
+<!-- ============ end SWTL marker highlight & underline draw ============ -->

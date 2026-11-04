@@ -1,0 +1,233 @@
+<!-- ==========================================================
+     SWTL MOTION · 11 STAT COUNT-UP                 v1.0.0
+     Paste into: Settings → Developer Tools → Code Injection → FOOTER
+     Docs: presets/11-stat-countup/INSTALL.md
+     ----------------------------------------------------------
+     Numbers you type in Text blocks ("25+", "1,200", "98%", "$4.5M",
+     "3.2x") count up from 0 when they scroll into view, then end on
+     the exact text you typed. Plays once per page view.
+     Only sections that hold the marker Code Block
+       <div data-swtl-countup hidden></div>
+     ========================================================== -->
+
+<style>
+  /* Wrappers exist only after the script decides to run. The typed
+     number stays in the page (screen readers read it) and keeps its
+     width; a counting copy is drawn over it. */
+  html.swtl-cu-on .swtl-cu-stat { position: relative; display: inline-block; white-space: nowrap; }
+  html.swtl-cu-on .swtl-cu-box { position: relative; display: inline-block; }
+  html.swtl-cu-on .swtl-cu-final { opacity: 0; }
+  html.swtl-cu-on .swtl-cu-run {
+    position: absolute; top: 0; right: 0;
+    white-space: nowrap; font-variant-numeric: tabular-nums;
+  }
+  html.swtl-cu-on .swtl-cu-line::after {
+    content: ""; position: absolute; left: 0; right: 0;
+    bottom: var(--swtl-cu-line-gap, -0.06em);
+    height: var(--swtl-cu-line-size, max(2px, 0.045em));
+    background: var(--swtl-cu-line-color, var(--swtl-accent, #D4552B));
+    transform: scaleX(var(--swtl-cu-p, 0)); transform-origin: 0 50%;
+    pointer-events: none;
+  }
+  html.swtl-cu-on .swtl-cu-line.swtl-cu-done::after { transform: none; }
+</style>
+
+<script>
+(function () {
+  'use strict';
+
+  /* ---------------- CONFIG ----------------
+     Optional: define window.SwtlCountUp = { ... } ABOVE this snippet.
+     Per section: data-target / data-duration / data-stagger /
+     data-underline on the marker div override these. */
+  var C = {
+    target: 'headings',  /* 'headings' = h1–h4 · 'emphasis' = bold/italic text · 'all' = headings + paragraphs */
+    duration: 1.6,       /* s per number */
+    stagger: 0.12,       /* s between numbers that enter together */
+    maxDelay: 0.8,       /* s cap on the stagger */
+    underline: true,     /* thin accent line grows under each number */
+    skipYears: true,     /* leave 1900–2099 alone ("Since 2009") */
+    rootMargin: '0px 0px -10% 0px'
+  };
+  var user = window.SwtlCountUp || {};
+  for (var key in user) { if (Object.prototype.hasOwnProperty.call(user, key)) C[key] = user[key]; }
+  /* ----------------------------------------- */
+
+  var framed = true;
+  try { framed = window.self !== window.top; } catch (e) {}
+  if (framed || !('IntersectionObserver' in window)) return;
+  if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+
+  var root = document.documentElement;
+  var MARK = '[data-swtl-countup]';
+  var SEL = { headings: 'h1,h2,h3,h4', emphasis: 'strong,em,b,i', all: 'h1,h2,h3,h4,p' };
+  /* one word = optional symbol prefix, one number, optional non-digit suffix */
+  var WORD = /^([^\w\s\d]{0,2})(\d{1,3}(?:,\d{3})+|\d+)(\.\d+)?([^\d\s]{0,4})$/;
+  var io = null, records = [], stats = [], done = [], raf = 0, running = false;
+
+  function editing() {
+    var b = document.body.classList;
+    return b.contains('sqs-edit-mode-active') || b.contains('sqs-is-page-editing');
+  }
+  function num(v, d) { var n = parseFloat(v); return isNaN(n) ? d : n; }
+
+  function settings(m) {
+    var u = m.getAttribute('data-underline');
+    return {
+      target: SEL[m.getAttribute('data-target')] ? m.getAttribute('data-target') : C.target,
+      duration: num(m.getAttribute('data-duration'), C.duration),
+      stagger: num(m.getAttribute('data-stagger'), C.stagger),
+      underline: u === null ? !!C.underline : u !== 'false'
+    };
+  }
+
+  function fmt(v, s) {
+    var f = Math.pow(10, s.dec), t = (Math.floor(v * f + 1e-6) / f).toFixed(s.dec);
+    if (s.commas) t = t.replace(/^\d+/, function (i) { return i.replace(/\B(?=(\d{3})+(?!\d))/g, ','); });
+    return t;
+  }
+
+  function el(tag, cls, txt) {
+    var e = document.createElement(tag);
+    e.className = cls;
+    if (txt !== undefined) e.textContent = txt;
+    return e;
+  }
+
+  /* Split one text node into plain text + stat wrappers. */
+  function wrap(node, s) {
+    var parts = node.data.split(/(\s+)/), out = [], mine = [], plain = '';
+    for (var i = 0; i < parts.length; i++) {
+      var m = parts[i] && WORD.exec(parts[i]);
+      var val = m && parseFloat(m[2].replace(/,/g, '') + (m[3] || ''));
+      var year = m && !m[3] && m[2].indexOf(',') < 0 && val >= 1900 && val <= 2099;
+      if (!m || !val || (C.skipYears && year)) { plain += parts[i]; continue; }
+      if (plain) { out.push(document.createTextNode(plain)); plain = ''; }
+      var st = { value: val, dec: m[3] ? m[3].length - 1 : 0, commas: m[2].indexOf(',') > -1,
+                 word: parts[i], dur: s.duration, stagger: s.stagger, line: s.underline };
+      st.el = el('span', 'swtl-cu-stat' + (s.underline ? ' swtl-cu-line' : ''));
+      st.box = el('span', 'swtl-cu-box');
+      st.run = el('span', 'swtl-cu-run', fmt(0, st));
+      st.run.setAttribute('aria-hidden', 'true');
+      st.box.appendChild(el('span', 'swtl-cu-final', m[2] + (m[3] || '')));
+      st.box.appendChild(st.run);
+      if (m[1]) st.el.appendChild(document.createTextNode(m[1]));
+      st.el.appendChild(st.box);
+      if (m[4]) st.el.appendChild(document.createTextNode(m[4]));
+      out.push(st.el); mine.push(st);
+    }
+    if (!mine.length) return;
+    if (plain) out.push(document.createTextNode(plain));
+    var rec = { orig: node, nodes: out, stats: mine, left: mine.length };
+    for (var j = 0; j < out.length; j++) node.parentNode.insertBefore(out[j], node);
+    node.parentNode.removeChild(node);
+    for (var k = 0; k < mine.length; k++) { mine[k].rec = rec; stats.push(mine[k]); }
+    records.push(rec);
+  }
+
+  function restore(rec) {
+    if (!rec.nodes) return;
+    var first = rec.nodes[0];
+    if (first.parentNode) first.parentNode.insertBefore(rec.orig, first);
+    for (var i = 0; i < rec.nodes.length; i++) if (rec.nodes[i].parentNode) rec.nodes[i].parentNode.removeChild(rec.nodes[i]);
+    rec.nodes = null;
+  }
+
+  function collect() {
+    var marks = document.querySelectorAll(MARK);
+    for (var i = 0; i < marks.length; i++) {
+      var sec = marks[i].closest('section.page-section');
+      if (!sec) continue;
+      var s = settings(marks[i]), seen = [];
+      var hosts = sec.querySelectorAll('.sqs-html-content');
+      for (var h = 0; h < hosts.length; h++) {
+        var els = hosts[h].querySelectorAll(SEL[s.target]);
+        for (var e = 0; e < els.length; e++) {
+          var w = document.createTreeWalker(els[e], NodeFilter.SHOW_TEXT, null, false), n, list = [];
+          while ((n = w.nextNode())) if (seen.indexOf(n) < 0 && done.indexOf(n) < 0 && /\d/.test(n.data)) { seen.push(n); list.push(n); }
+          for (var t = 0; t < list.length; t++) wrap(list[t], s);
+        }
+      }
+    }
+  }
+
+  function finish(st) {
+    st.done = true;
+    if (st.line) { st.el.style.removeProperty('--swtl-cu-p'); if (st.el.getAttribute('style') === '') st.el.removeAttribute('style'); }
+    st.el.textContent = st.word;              /* drop the overlay */
+    st.el.classList.add('swtl-cu-done');
+    if (--st.rec.left === 0) {
+      done.push(st.rec.orig);
+      if (!st.line) restore(st.rec);          /* no underline: original text node back */
+    }
+  }
+
+  function tick(now) {
+    raf = 0;
+    var live = false;
+    for (var i = 0; i < stats.length; i++) {
+      var st = stats[i];
+      if (!st.t0 || st.done) continue;
+      var p = Math.max(0, Math.min(1, (now - st.t0) / (st.dur * 1000)));
+      if (p >= 1) { finish(st); continue; }
+      live = true;
+      var e = 1 - Math.pow(1 - p, 3);          /* ease-out cubic */
+      st.run.textContent = fmt(st.value * e, st);
+      if (st.line) st.el.style.setProperty('--swtl-cu-p', e.toFixed(4));
+    }
+    if (live) raf = requestAnimationFrame(tick);
+  }
+
+  function find(node) {
+    for (var i = 0; i < stats.length; i++) if (stats[i].el === node) return stats[i];
+    return null;
+  }
+
+  function onEnter(entries) {
+    var batch = [];
+    for (var i = 0; i < entries.length; i++) {
+      if (!entries[i].isIntersecting) continue;
+      var st = find(entries[i].target);
+      if (st && !st.t0) { st.r = entries[i].boundingClientRect; batch.push(st); }
+    }
+    batch.sort(function (a, b) { var dy = a.r.top - b.r.top; return Math.abs(dy) > 8 ? dy : a.r.left - b.r.left; });
+    var now = performance.now();
+    for (var j = 0; j < batch.length; j++) {
+      batch[j].t0 = now + Math.min(j * batch[j].stagger, C.maxDelay) * 1000;
+      io.unobserve(batch[j].el);
+    }
+    if (batch.length && !raf) raf = requestAnimationFrame(tick);
+  }
+
+  function init() {
+    if (running || editing()) return;
+    collect();
+    if (!stats.length) return;
+    running = true;
+    root.classList.add('swtl-cu-on');
+    io = new IntersectionObserver(onEnter, { rootMargin: C.rootMargin, threshold: 0 });
+    for (var i = 0; i < stats.length; i++) io.observe(stats[i].el);
+  }
+
+  function teardown() {
+    if (io) { io.disconnect(); io = null; }
+    if (raf) { cancelAnimationFrame(raf); raf = 0; }
+    for (var i = 0; i < records.length; i++) restore(records[i]);
+    records = []; stats = [];
+    root.classList.remove('swtl-cu-on');
+    running = false;
+  }
+
+  function start() {
+    init();
+    /* Squarespace editor: tear down on edit, re-init on exit. */
+    new MutationObserver(function () {
+      if (editing()) teardown(); else init();
+    }).observe(document.body, { attributes: true, attributeFilter: ['class'] });
+  }
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start);
+  else start();
+})();
+</script>
+<!-- ============ end SWTL stat count-up ============ -->
