@@ -1,0 +1,19 @@
+{
+  "id": "16",
+  "slug": "16-before-after",
+  "name": "Before / After Slider",
+  "category": "Interaction",
+  "use": "Pairs two native image blocks into a draggable before/after comparison, with a keyboard-accessible handle and a one-time intro nudge.",
+  "best_for": [
+    "Contractors",
+    "Design-build",
+    "Landscaping",
+    "Cleaning",
+    "Medical aesthetics"
+  ],
+  "install": "Footer injection + Code Block",
+  "dependencies": "None",
+  "snippet_kb": 11.0,
+  "status": "beta",
+  "notes": "Over the 8 KB budget (11.0 KB): it is a full ARIA slider (pointer + touch + pen drag, arrow/Home/End keys, aria-valuetext), labels with alt-text mode, lazy-load sync of the after image and a full editor teardown. The after block keeps its grid space while hidden (visibility), so place it where a gap is fine or overlap it on the before block. GIF is 0.71 MB at 1280px/20fps."
+}

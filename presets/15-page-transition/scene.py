@@ -38,7 +38,7 @@ LABEL_W = k.text_width(LABEL, LABEL_SIZE, "SemiBold", -0.01)
 # nav item "Work" in k.site_header(): x=760, baseline y=44, 14px Medium
 NAV_X, NAV_Y = 760 + k.text_width("Work", 14, "Medium") / 2, 39
 CUR_FROM = (1010.0, 430.0)
-CUR_TO = (NAV_X - 2, NAV_Y - 4)
+CUR_TO = (NAV_X + 5, NAV_Y + 1)
 CUR_MOVE = (0.15, 0.80)
 
 

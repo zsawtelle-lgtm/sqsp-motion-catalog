@@ -1,0 +1,18 @@
+{
+  "id": "13",
+  "slug": "13-horizontal-scroll",
+  "name": "Horizontal Scroll Gallery",
+  "category": "Scroll effect",
+  "use": "A carousel List Section pins under the header and vertical scroll slides its cards left, with an accent progress hairline; below 768px it becomes a native swipe row with scroll-snap.",
+  "best_for": [
+    "Portfolio",
+    "Architecture",
+    "Agency",
+    "Case studies"
+  ],
+  "install": "Footer injection + Code Block",
+  "dependencies": "None",
+  "snippet_kb": 9.0,
+  "status": "beta",
+  "notes": "Source is a List Section (Carousel layout): the only native source that already lays cards out in one row wider than the screen (Fluid Engine grids are screen-wide; Gallery sections are image-only and run their own layout). Scroll room = a script-owned aria-hidden spacer appended to the section (removed on teardown); no height on Squarespace elements. Marker goes in the section above, since List Sections take no Code Block. Over the 8 KB budget (9.0 KB unminified) because of two modes (pin / swipe), spacer, hairline and observers. Carousel class names (user-items-list-carousel__slides / __slideshow-holder) and arrow selectors are from 7.1 markup but not yet verified on a live site."
+}
