@@ -1,0 +1,219 @@
+<!-- SWTL MOTION · 08 MARQUEE BAND v1.0.0 · Code Injection → FOOTER
+     + marker Code Block per section. Docs: presets/08-marquee-band/INSTALL.md -->
+<style>
+  .swtl-mq-src {                 /* source Text Block: visually hidden, still read aloud */
+    position: absolute !important; top: 0; left: 0;
+    clip: rect(0 0 0 0) !important; clip-path: inset(50%) !important;
+    overflow: hidden !important; pointer-events: none !important;
+  }
+  .swtl-mq-band {
+    position: relative; overflow: hidden;
+    background: var(--swtl-mq-bg, var(--swtl-ink, #1F1E1C));
+    color: var(--swtl-mq-color, var(--swtl-paper, #F4F1EA));
+    padding: var(--swtl-mq-pad, .22em) 0;
+    font-size: var(--swtl-mq-size, clamp(40px, 7vw, 96px));
+    font-family: var(--swtl-mq-font, inherit);
+    font-weight: var(--swtl-mq-weight, 600);
+    letter-spacing: -.02em; line-height: 1.15;
+    -webkit-user-select: none; user-select: none;
+  }
+  .swtl-mq-row { overflow: hidden; white-space: nowrap; }
+  .swtl-mq-row + .swtl-mq-row { margin-top: var(--swtl-mq-row-gap, .08em); }
+  .swtl-mq-track { display: flex; width: max-content; will-change: transform; }
+  .swtl-mq-set { display: flex; align-items: center; flex: none; }
+  .swtl-mq-item { display: inline-block; padding: 0 var(--swtl-mq-gap, .42em); transform: skewX(var(--swtl-mq-skew, 0deg)); }
+  .swtl-mq-sep { display: inline-flex; color: var(--swtl-accent, #D4552B); }
+  .swtl-mq-sep svg { width: var(--swtl-mq-glyph, .42em); height: var(--swtl-mq-glyph, .42em); display: block; }
+  .swtl-mq-outline .swtl-mq-item,
+  .swtl-mq-alternate .swtl-mq-item:nth-child(4n+3) {
+    color: transparent;
+    -webkit-text-stroke: var(--swtl-mq-stroke, 1.5px) var(--swtl-mq-color, var(--swtl-paper, #F4F1EA));
+  }
+  .swtl-mq-run .swtl-mq-track {
+    animation: swtl-mq-move var(--swtl-mq-dur, 20s) linear infinite;
+  }
+  .swtl-mq-run .swtl-mq-right .swtl-mq-track { animation-direction: reverse; }
+  .swtl-mq-paused .swtl-mq-track,
+  .swtl-mq-hover:hover .swtl-mq-track { animation-play-state: paused; }
+  @keyframes swtl-mq-move {
+    from { transform: translate3d(0, 0, 0); }
+    to   { transform: translate3d(var(--swtl-mq-shift, -50%), 0, 0); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .swtl-mq-track { animation: none !important; }
+  }
+</style>
+
+<script>
+(function () {
+  'use strict';
+
+  /* CONFIG — override with window.SwtlMarquee = {...} above this snippet,
+     or per section with data-* attributes on the marker. */
+  var C = {
+    speed: 100,           /* px per second, the same on every screen size */
+    direction: 'left',    /* 'left' | 'right' */
+    pauseOnHover: true,
+    secondBand: false,    /* true = add a second band running the other way */
+    style: 'solid',       /* 'solid' | 'outline' | 'alternate' */
+    secondStyle: 'outline',
+    glyph: 'star',        /* 'star' | 'dot' | 'none' */
+    bleed: true           /* true = band runs edge to edge of the window */
+  };
+  var user = window.SwtlMarquee || {};
+  for (var key in user) { if (Object.prototype.hasOwnProperty.call(user, key)) C[key] = user[key]; }
+
+  var framed = true;
+  try { framed = window.self !== window.top; } catch (e) {}
+  if (framed) return;                       /* the editor frames the site */
+
+  var GLYPHS = {
+    star: '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 1.5c.7 5.6 4.9 9.8 10.5 10.5-5.6.7-9.8 4.9-10.5 10.5C11.3 16.9 7.1 12.7 1.5 12 7.1 11.3 11.3 7.1 12 1.5z"/></svg>',
+    dot: '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="12" cy="12" r="6"/></svg>'
+  };
+  var body = document.body, root = document.documentElement;
+  var bands = [], io = null, lastW = 0, timer = 0;
+  var reduced = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+
+  function editing() {
+    return body.classList.contains('sqs-edit-mode-active') || body.classList.contains('sqs-is-page-editing');
+  }
+  function opt(m, name, dflt) {
+    var v = m.getAttribute('data-' + name);
+    if (v === null) return dflt;
+    if (v === '' || v === 'true') return typeof dflt === 'boolean' ? true : v;
+    if (v === 'false') return false;
+    return typeof dflt === 'number' ? parseFloat(v) || dflt : v;
+  }
+
+  function phrases(src) {
+    var c = src.querySelector('.sqs-html-content') || src, out = [];
+    var nodes = c.querySelectorAll('p, h1, h2, h3, h4, li');
+    if (!nodes.length) nodes = [c];
+    for (var i = 0; i < nodes.length; i++) {
+      var n = nodes[i].cloneNode(true), brs = n.querySelectorAll('br');
+      for (var b = 0; b < brs.length; b++) brs[b].parentNode.replaceChild(document.createTextNode('\n'), brs[b]);
+      var parts = n.textContent.split(/\s*[\/|\n]\s*|\s+[—–]\s+/);
+      for (var j = 0; j < parts.length; j++) { var t = parts[j].replace(/\s+/g, ' ').trim(); if (t) out.push(t); }
+    }
+    return out;
+  }
+
+  function makeSet(words, glyph) {
+    var set = document.createElement('div'), html = '';
+    set.className = 'swtl-mq-set';
+    for (var i = 0; i < words.length; i++) {
+      var s = document.createElement('span');
+      s.textContent = words[i];
+      html += '<span class="swtl-mq-item">' + s.innerHTML + '</span>';
+      if (GLYPHS[glyph]) html += '<span class="swtl-mq-sep">' + GLYPHS[glyph] + '</span>';
+    }
+    set.innerHTML = html;
+    return set;
+  }
+
+  function makeRow(band, words, cfg, dir, style) {
+    var row = document.createElement('div'), track = document.createElement('div');
+    row.className = 'swtl-mq-row swtl-mq-' + dir + ' swtl-mq-' + style;
+    track.className = 'swtl-mq-track';
+    row.appendChild(track);
+    band.appendChild(row);
+    var first = makeSet(words, cfg.glyph);
+    track.appendChild(first);
+    var w = first.getBoundingClientRect().width;     /* one loop period, px */
+    if (w < 1) return;
+    var need = Math.max(2, Math.ceil((2 * root.clientWidth) / w) + 1);
+    for (var i = 1; i < need; i++) track.appendChild(first.cloneNode(true));
+    track.style.setProperty('--swtl-mq-shift', (-w) + 'px');
+    track.style.setProperty('--swtl-mq-dur', (w / Math.max(1, cfg.speed)) + 's');
+    track.setAttribute('data-swtl-mq-period', w);
+  }
+
+  function bleed(band) {
+    band.style.width = '';
+    band.style.marginLeft = '';
+    var r = band.parentNode.getBoundingClientRect();
+    band.style.width = root.clientWidth + 'px';
+    band.style.marginLeft = (-r.left) + 'px';
+  }
+
+  function build(m) {
+    var section = m.closest('section.page-section');
+    if (!section) return;
+    var blocks = section.querySelectorAll('.sqs-block.html-block');
+    var src = blocks[(parseInt(m.getAttribute('data-source'), 10) || 1) - 1];
+    if (!src) return;
+    var words = phrases(src);
+    if (!words.length) return;
+    var cfg = {
+      speed: opt(m, 'speed', C.speed), direction: opt(m, 'direction', C.direction),
+      pauseOnHover: opt(m, 'pause-on-hover', C.pauseOnHover), secondBand: opt(m, 'second-band', C.secondBand),
+      style: opt(m, 'style', C.style), secondStyle: opt(m, 'second-style', C.secondStyle),
+      glyph: opt(m, 'glyph', C.glyph), bleed: opt(m, 'bleed', C.bleed)
+    };
+    var host = src.querySelector('.sqs-block-content') || src;
+    var content = host.querySelector('.sqs-html-content') || host.firstElementChild;
+    var band = document.createElement('div');
+    band.className = 'swtl-mq-band' + (cfg.pauseOnHover ? ' swtl-mq-hover' : '') + (reduced ? '' : ' swtl-mq-run');
+    band.setAttribute('aria-hidden', 'true');
+    host.appendChild(band);
+    if (content) content.classList.add('swtl-mq-src');
+    if (cfg.bleed) bleed(band);
+    var dir = cfg.direction === 'right' ? 'right' : 'left';
+    makeRow(band, words, cfg, dir, cfg.style);
+    if (cfg.secondBand) makeRow(band, words.slice().reverse(), cfg, dir === 'left' ? 'right' : 'left', cfg.secondStyle);
+    bands.push({ band: band, content: content });
+    if (io) io.observe(band);
+  }
+
+  function pauseAll(p) {
+    for (var i = 0; i < bands.length; i++) bands[i].band.classList.toggle('swtl-mq-paused', p || !!bands[i].off);
+  }
+
+  function init() {
+    if (bands.length || editing()) return;
+    lastW = root.clientWidth;
+    if ('IntersectionObserver' in window) {
+      io = new IntersectionObserver(function (entries) {
+        for (var i = 0; i < entries.length; i++) {
+          for (var j = 0; j < bands.length; j++) {
+            if (bands[j].band === entries[i].target) bands[j].off = !entries[i].isIntersecting;
+          }
+        }
+        pauseAll(document.hidden);
+      });
+    }
+    var ms = document.querySelectorAll('[data-swtl-marquee]');
+    for (var i = 0; i < ms.length; i++) build(ms[i]);
+    if (bands.length) root.classList.add('swtl-mq-on');
+    pauseAll(document.hidden);
+  }
+
+  function teardown() {
+    if (io) { io.disconnect(); io = null; }
+    for (var i = 0; i < bands.length; i++) {
+      var b = bands[i];
+      if (b.band.parentNode) b.band.parentNode.removeChild(b.band);
+      if (b.content) b.content.classList.remove('swtl-mq-src');
+    }
+    bands = [];
+    root.classList.remove('swtl-mq-on');
+  }
+
+  function rebuild() { teardown(); init(); }
+
+  new MutationObserver(function () {
+    if (editing()) teardown(); else if (!bands.length) init();
+  }).observe(body, { attributes: true, attributeFilter: ['class'] });
+
+  window.addEventListener('resize', function () {
+    clearTimeout(timer);
+    timer = setTimeout(function () { if (root.clientWidth !== lastW && !editing()) rebuild(); }, 200);
+  });
+  document.addEventListener('visibilitychange', function () { pauseAll(document.hidden); });
+
+  init();
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(function () { if (bands.length) rebuild(); });
+})();
+</script>
+<!-- end SWTL marquee band -->

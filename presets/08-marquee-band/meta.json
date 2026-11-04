@@ -1,0 +1,13 @@
+{
+  "id": "08",
+  "slug": "08-marquee-band",
+  "name": "Marquee Band",
+  "category": "Text",
+  "use": "Endless ticker band of big words with accent stars. The phrases come from a normal Text Block, and an optional outlined second band runs the other way.",
+  "best_for": ["Architecture", "Design-build", "Agency", "Hospitality"],
+  "install": "Footer + Code Block",
+  "dependencies": "None",
+  "snippet_kb": 9.5,
+  "status": "beta",
+  "notes": "Over the 8 KB budget (9.5 KB unminified) because of six options plus Text Block parsing. Preview runs at ~270 px/s so one loop period fits in 5.9 s (snippet default 100 px/s). The GIF is rendered with aliased edges (MQ_CRISP=1) to fit under 2.5 MB; antialiased moving text produced ~4.5 MB. The MP4 and poster are antialiased."
+}
