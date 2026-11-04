@@ -1,0 +1,13 @@
+{
+  "id": "04",
+  "slug": "04-block-rise",
+  "name": "Staggered Block Rise",
+  "category": "Scroll reveal",
+  "use": "Fluid Engine blocks rise and fade in, staggered in reading order, as a section scrolls into view.",
+  "best_for": ["Services pages", "Agency", "Professional services", "Portfolio"],
+  "install": "Footer injection + Code Block",
+  "dependencies": "None",
+  "snippet_kb": 7.4,
+  "status": "beta",
+  "notes": "Order is measured from rendered position, not DOM order. Stagger runs per batch of blocks that enter together, so rows lower in a tall section start fresh as they scroll in."
+}

@@ -1,0 +1,204 @@
+<!-- ==========================================================
+     SWTL MOTION · 10 PARALLAX DEPTH LAYERS          v1.0.0
+     Paste into: Settings → Developer Tools → Code Injection → FOOTER
+     Then add the marker Code Block to each section that should move.
+     Docs: presets/10-parallax-depth/INSTALL.md
+     ----------------------------------------------------------
+     Blocks in a marked section scroll at different speeds:
+     images drift slower, text stays put, buttons float faster.
+     Offsets are clamped (±80px) so the editor layout stays true.
+     ========================================================== -->
+
+<style>
+  html.swtl-px-on .swtl-px-layer { will-change: transform; }
+  html.swtl-px-on .swtl-px-bg { overflow: hidden; }
+  html.swtl-px-on .swtl-px-bgimg { will-change: transform; transform-origin: 50% 50%; }
+</style>
+
+<script>
+(function () {
+  'use strict';
+
+  /* ---------------- CONFIG ----------------
+     Optional: define window.SwtlParallax = { ... } ABOVE this snippet.
+     Marker data-* attributes override these per section.
+     Speeds: 0 = normal scroll, negative = slower (sinks back),
+     positive = faster (floats forward). -0.15 ≈ 85% scroll speed.  */
+  var C = {
+    images: -0.15,      /* image blocks */
+    text: 0,            /* text blocks */
+    buttons: 0.08,      /* button blocks */
+    other: 0,           /* any other block type */
+    background: -0.2,   /* section background image; 0 = off */
+    bgScale: 1.12,      /* background oversize so its edges never show */
+    max: 80,            /* px — no block ever moves further than this */
+    minWidth: 768,      /* px — off below this viewport width */
+    margin: 200         /* px — start updating this far before the section enters */
+  };
+  var user = window.SwtlParallax || {};
+  for (var key in user) { if (Object.prototype.hasOwnProperty.call(user, key)) C[key] = user[key]; }
+  /* ----------------------------------------- */
+
+  var framed = true;
+  try { framed = window.self !== window.top; } catch (e) {}
+  if (framed) return;
+
+  var root = document.documentElement;
+  var mqReduce = window.matchMedia ? window.matchMedia('(prefers-reduced-motion: reduce)') : null;
+  var scenes = [], running = false, io = null;
+
+  function num(v, d) { var n = parseFloat(v); return isNaN(n) ? d : n; }
+  function editing() {
+    var b = document.body.classList;
+    return b.contains('sqs-edit-mode-active') || b.contains('sqs-is-page-editing');
+  }
+  function allowed() {
+    return !editing() && !(mqReduce && mqReduce.matches) && window.innerWidth >= C.minWidth;
+  }
+  function speedFor(block, opt) {
+    if (block.classList.contains('image-block')) return opt.images;
+    if (block.classList.contains('html-block')) return opt.text;
+    if (block.classList.contains('button-block')) return opt.buttons;
+    return opt.other;
+  }
+
+  function build(marker) {
+    var section = marker.closest('section.page-section');
+    if (!section) return null;
+    var d = marker.dataset, opt = {};
+    ['images', 'text', 'buttons', 'other', 'background', 'max'].forEach(function (k) { opt[k] = num(d[k], C[k]); });
+    var overrides = {};
+    (d.blocks || '').split(',').forEach(function (pair) {
+      var p = pair.split(':');
+      if (p.length === 2) overrides[parseInt(p[0], 10)] = num(p[1], 0);
+    });
+
+    /* visual order = top, then left (measured before any transform) */
+    var fe = [].slice.call(section.querySelectorAll('.fluid-engine > .fe-block')).filter(function (b) {
+      return !b.querySelector('[data-swtl-parallax]');
+    });
+    var rects = fe.map(function (b) { return b.getBoundingClientRect(); });
+    var order = fe.map(function (b, i) { return i; }).sort(function (a, b) {
+      return (rects[a].top - rects[b].top) || (rects[a].left - rects[b].left);
+    });
+
+    var layers = [];
+    order.forEach(function (i, pos) {
+      var block = fe[i].querySelector('.sqs-block');
+      if (!block) return;
+      var s = Object.prototype.hasOwnProperty.call(overrides, pos + 1) ? overrides[pos + 1] : speedFor(block, opt);
+      if (!s) return;
+      block.classList.add('swtl-px-layer');
+      layers.push({ el: block, speed: s });
+    });
+
+    var bg = null, bgImg = section.querySelector('.section-background img');
+    if (bgImg && opt.background) {
+      bg = { wrap: bgImg.closest('.section-background') || bgImg.parentNode, img: bgImg, speed: opt.background };
+      bg.wrap.classList.add('swtl-px-bg');
+      bgImg.classList.add('swtl-px-bgimg');
+    }
+    return { section: section, layers: layers, bg: bg, max: opt.max, visible: false, last: null };
+  }
+
+  function update(sc) {
+    var r = sc.section.getBoundingClientRect(), vh = window.innerHeight;
+    var dist = r.top + r.height / 2 - vh / 2;
+    var sig = Math.round(dist * 2) + ':' + vh;
+    if (sig === sc.last) return false;
+    sc.last = sig;
+    for (var i = 0; i < sc.layers.length; i++) {
+      var L = sc.layers[i];
+      var y = Math.max(-sc.max, Math.min(sc.max, L.speed * dist));
+      L.el.style.transform = 'translate3d(0,' + y.toFixed(2) + 'px,0)';
+    }
+    if (sc.bg) {
+      var room = r.height * (C.bgScale - 1) / 2;
+      var by = Math.max(-room, Math.min(room, sc.bg.speed * dist));
+      sc.bg.img.style.transform = 'translate3d(0,' + by.toFixed(2) + 'px,0) scale(' + C.bgScale + ')';
+    }
+    return true;
+  }
+
+  function tick() {
+    if (!running) return;
+    var changed = false;
+    for (var i = 0; i < scenes.length; i++) {
+      if (scenes[i].visible && update(scenes[i])) changed = true;
+    }
+    tick.idle = changed ? 0 : (tick.idle || 0) + 1;
+    /* keep looping while something on screen moves; sleep after 20 still frames */
+    if (tick.idle < 20) window.requestAnimationFrame(tick);
+    else tick.on = false;
+  }
+  function wake() {
+    if (!running) return;
+    tick.idle = 0;
+    var vis = false;
+    for (var i = 0; i < scenes.length; i++) if (scenes[i].visible) vis = true;
+    if (vis && !tick.on) { tick.on = true; window.requestAnimationFrame(tick); }
+  }
+
+  function init() {
+    if (running || !allowed()) return;
+    var markers = document.querySelectorAll('[data-swtl-parallax]');
+    for (var i = 0; i < markers.length; i++) {
+      var sc = build(markers[i]);
+      if (sc && (sc.layers.length || sc.bg)) scenes.push(sc);
+    }
+    if (!scenes.length) return;
+    running = true;
+    root.classList.add('swtl-px-on');
+    scenes.forEach(update);
+    if ('IntersectionObserver' in window) {
+      io = new IntersectionObserver(function (entries) {
+        entries.forEach(function (en) {
+          scenes.forEach(function (sc) { if (sc.section === en.target) sc.visible = en.isIntersecting; });
+        });
+        wake();
+      }, { rootMargin: C.margin + 'px 0px' });
+      scenes.forEach(function (sc) { io.observe(sc.section); });
+    } else {
+      scenes.forEach(function (sc) { sc.visible = true; });
+      wake();
+    }
+  }
+
+  function teardown() {
+    if (io) { io.disconnect(); io = null; }
+    running = false;
+    tick.on = false;
+    scenes.forEach(function (sc) {
+      sc.layers.forEach(function (L) { L.el.style.transform = ''; L.el.classList.remove('swtl-px-layer'); });
+      if (sc.bg) {
+        sc.bg.img.style.transform = '';
+        sc.bg.img.classList.remove('swtl-px-bgimg');
+        sc.bg.wrap.classList.remove('swtl-px-bg');
+      }
+    });
+    scenes = [];
+    root.classList.remove('swtl-px-on');
+  }
+
+  function refresh() {
+    if (allowed()) { if (!running) init(); }
+    else if (running) teardown();
+  }
+
+  function start() {
+    init();
+    window.addEventListener('scroll', wake, { passive: true });
+    new MutationObserver(refresh).observe(document.body, { attributes: true, attributeFilter: ['class'] });
+    var t;
+    window.addEventListener('resize', function () {
+      clearTimeout(t);
+      t = setTimeout(function () { if (running) teardown(); refresh(); }, 150);
+    });
+    if (mqReduce && mqReduce.addEventListener) mqReduce.addEventListener('change', refresh);
+  }
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start);
+  else start();
+})();
+</script>
+<!-- ============ end SWTL parallax depth layers ============ -->

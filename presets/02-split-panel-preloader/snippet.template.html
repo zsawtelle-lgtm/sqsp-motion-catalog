@@ -1,0 +1,225 @@
+<!-- ==========================================================
+     SWTL MOTION · 02 SPLIT-PANEL PRELOADER        v1.0.0
+     Paste into: Settings → Developer Tools → Code Injection → HEADER
+     Docs: presets/02-split-panel-preloader/INSTALL.md
+     ----------------------------------------------------------
+     Solid panels cover the screen, the logo rises in over an
+     accent hairline, then the panels part to reveal the page.
+     Swap the <svg> inside the <template> for the client's logo.
+     ========================================================== -->
+
+<template id="swtl-sp-markup">__MARKUP__</template>
+
+<style>
+  /* Colors: set --swtl-paper / --swtl-ink / --swtl-accent once in
+     Custom CSS to restyle every SWTL motion preset at the same time. */
+  html.swtl-sp-init::before {
+    content: '';
+    position: fixed; inset: 0;
+    background: var(--swtl-sp-panel, var(--swtl-ink, #1F1E1C));
+    z-index: 99998;
+  }
+  html.swtl-sp-lock { overflow: hidden !important; }
+
+  #swtl-sp-preloader {
+    position: fixed; inset: 0;
+    z-index: 99999;
+    overflow: hidden;
+    pointer-events: auto;
+  }
+  #swtl-sp-preloader.swtl-sp-done { pointer-events: none; }
+  #swtl-sp-preloader .swtl-sp-panel {
+    position: absolute;
+    background: var(--swtl-sp-panel, var(--swtl-ink, #1F1E1C));
+    will-change: transform;
+  }
+  #swtl-sp-preloader .swtl-sp-center {
+    position: absolute; inset: 0;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    gap: 28px;
+  }
+  #swtl-sp-preloader .swtl-sp-mark {
+    width: var(--swtl-sp-size, min(240px, 56vw));
+    height: auto;
+    overflow: visible;
+  }
+  #swtl-sp-preloader .swtl-sp-line   { stroke: var(--swtl-sp-logo, var(--swtl-paper, #F4F1EA)); }
+  #swtl-sp-preloader .swtl-sp-fill   { fill: var(--swtl-sp-logo, var(--swtl-paper, #F4F1EA)); }
+  #swtl-sp-preloader .swtl-sp-accent { stroke: var(--swtl-accent, #D4552B); }
+  #swtl-sp-preloader .swtl-sp-track {
+    position: relative;
+    width: var(--swtl-sp-size, min(240px, 56vw));
+    height: 2px;
+    overflow: hidden;
+  }
+  #swtl-sp-preloader .swtl-sp-track::before {
+    content: ''; position: absolute; inset: 0;
+    background: var(--swtl-sp-logo, var(--swtl-paper, #F4F1EA));
+    opacity: 0.16;
+  }
+  #swtl-sp-preloader .swtl-sp-bar {
+    position: absolute; inset: 0;
+    background: var(--swtl-accent, #D4552B);
+    transform-origin: 0 50%;
+  }
+
+  @keyframes swtl-sp-in    { from { opacity: 0; transform: translateY(var(--swtl-sp-rise, 14px)); } }
+  @keyframes swtl-sp-out   { to   { opacity: 0; transform: translateY(-10px); } }
+  @keyframes swtl-sp-run   { from { transform: scaleX(0); } }
+  @keyframes swtl-sp-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+  @keyframes swtl-sp-fade  { to   { opacity: 0; } }
+</style>
+
+<script>
+(function () {
+  'use strict';
+
+  /* ---------------- CONFIG ----------------
+     Optional: define window.SwtlSplitPanel = { ... } ABOVE this snippet
+     to override any value without editing the code below.            */
+  var C = {
+    panels: 2,              /* number of panels (2 = halves) */
+    direction: 'vertical',  /* 'vertical' = side by side, part left/right
+                               'horizontal' = stacked, part up/down */
+    minShow: 'auto',        /* ms, or 'auto' = hairline run + short hold */
+    maxWait: 8000,          /* ms — fail-safe: never trap a visitor */
+    oncePerSession: true,   /* false = play on every page load */
+    speed: 1                /* 1 = default timing, 1.25 = 25% faster */
+  };
+  var user = window.SwtlSplitPanel || {};
+  for (var key in user) { if (Object.prototype.hasOwnProperty.call(user, key)) C[key] = user[key]; }
+  /* ----------------------------------------- */
+
+  /* timing (s) — mirrored exactly by the video scene (mark.py) */
+  var T = __TIMING__;
+  var EASE_PART = '__EASE_PART__', EASE_IN = '__EASE_IN__';
+  var EASE_LINE = '__EASE_LINE__', EASE_OUT = '__EASE_OUT__';
+
+  /* Never run inside the Squarespace editor (the site loads in a frame),
+     and allow ?nopreloader for quick checks. */
+  var framed = true;
+  try { framed = window.self !== window.top; } catch (e) {}
+  if (framed || /[?&]nopreloader\b/.test(location.search)) return;
+
+  var KEY = 'swtlSpShown';
+  if (C.oncePerSession) {
+    try { if (sessionStorage.getItem(KEY) === '1') return; } catch (e) {}
+  }
+
+  var reduced = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+  var root = document.documentElement;
+  root.classList.add('swtl-sp-init');
+  root.classList.add('swtl-sp-lock');
+
+  var s = 1 / (C.speed > 0 ? C.speed : 1);
+  var n = Math.max(1, Math.min(12, parseInt(C.panels, 10) || 2));
+  var horiz = C.direction === 'horizontal';
+  var overlay, center, panels = [], startTime, minShow = 400;
+  var pageLoaded = false, dismissed = false;
+
+  function px(v) { return v + 'px'; }
+
+  function build() {
+    overlay = document.createElement('div');
+    overlay.id = 'swtl-sp-preloader';
+    overlay.setAttribute('aria-hidden', 'true');
+    for (var i = 0; i < n; i++) {
+      var p = document.createElement('div');
+      p.className = 'swtl-sp-panel';
+      /* +1px overlap hides sub-pixel seams between panels */
+      var a = (100 * i / n) + '%', size = 'calc(' + (100 / n) + '% + 1px)';
+      if (horiz) { p.style.left = 0; p.style.right = 0; p.style.top = a; p.style.height = size; }
+      else       { p.style.top = 0; p.style.bottom = 0; p.style.left = a; p.style.width = size; }
+      overlay.appendChild(p);
+      panels.push(p);
+    }
+    center = document.createElement('div');
+    center.className = 'swtl-sp-center';
+    var tpl = document.getElementById('swtl-sp-markup');
+    if (tpl && tpl.content) center.appendChild(tpl.content.cloneNode(true));
+    var track = document.createElement('div');
+    track.className = 'swtl-sp-track';
+    track.innerHTML = '<div class="swtl-sp-bar"></div>';
+    center.appendChild(track);
+    overlay.appendChild(center);
+  }
+
+  function choreograph() {
+    var bar = center.querySelector('.swtl-sp-bar');
+    center.style.animation = 'swtl-sp-in ' + (T.LOGO_IN_DUR * s) + 's ' + EASE_IN + ' ' + (T.LOGO_IN_AT * s) + 's both';
+    center.style.setProperty('--swtl-sp-rise', px(T.LOGO_RISE));
+    var lineEnd = (T.LINE_AT + T.LINE_DUR) * s;
+    bar.style.animation = 'swtl-sp-run ' + (T.LINE_DUR * s) + 's ' + EASE_LINE + ' ' + (T.LINE_AT * s) + 's both, ' +
+                          'swtl-sp-pulse ' + T.PULSE_PERIOD + 's ease-in-out ' + (lineEnd + T.HOLD * s) + 's infinite';
+    return lineEnd + T.HOLD * s;
+  }
+
+  /* where panel i goes: the nearer edge, fully off screen */
+  function exitTransform(i) {
+    var axis = horiz ? 'Y' : 'X', mid = (n - 1) / 2, d;
+    if (n === 1) d = -100;
+    else if (i < mid) d = -100 * (i + 1);
+    else if (i > mid) d = 100 * (n - i);
+    else return 'translate' + (horiz ? 'X' : 'Y') + '(100%)';   /* odd middle panel */
+    return 'translate' + axis + '(' + d + '%)';
+  }
+
+  function mount() {
+    var bc = document.body.classList;
+    if (bc.contains('sqs-edit-mode-active') || bc.contains('sqs-is-page-editing')) { cleanup(); return; }
+    build();
+    document.body.insertBefore(overlay, document.body.firstChild);
+    root.classList.remove('swtl-sp-init');
+    startTime = Date.now();
+
+    var auto = reduced ? 0.4 : choreograph();
+    minShow = reduced ? 400 : (C.minShow === 'auto' ? Math.round(auto * 1000) : C.minShow);
+
+    if (C.oncePerSession) {
+      try { sessionStorage.setItem(KEY, '1'); } catch (e) {}
+    }
+    setTimeout(dismiss, Math.max(C.maxWait, 1000));
+    if (document.readyState === 'complete') { pageLoaded = true; tryDismiss(); }
+    else window.addEventListener('load', function () { pageLoaded = true; tryDismiss(); });
+  }
+
+  function tryDismiss() {
+    if (!pageLoaded || dismissed) return;
+    var elapsed = Date.now() - startTime;
+    if (elapsed >= minShow) dismiss();
+    else setTimeout(dismiss, minShow - elapsed);
+  }
+
+  function dismiss() {
+    if (dismissed || !overlay) return;
+    dismissed = true;
+    overlay.classList.add('swtl-sp-done');
+    root.classList.remove('swtl-sp-lock');
+    var total;
+    if (reduced) {
+      overlay.style.animation = 'swtl-sp-fade 0.2s linear forwards';
+      total = 0.2;
+    } else {
+      center.style.animation = 'swtl-sp-out ' + (T.LOGO_OUT_DUR * s) + 's ' + EASE_OUT + ' forwards';
+      for (var i = 0; i < n; i++) {
+        var delay = (T.PART_LEAD + i * T.PART_STAGGER) * s;
+        panels[i].style.transition = 'transform ' + (T.PART_DUR * s) + 's ' + EASE_PART + ' ' + delay + 's';
+        panels[i].style.transform = exitTransform(i);
+      }
+      total = (T.PART_LEAD + (n - 1) * T.PART_STAGGER + T.PART_DUR) * s;
+    }
+    setTimeout(cleanup, Math.round(total * 1000) + 60);
+  }
+
+  function cleanup() {
+    root.classList.remove('swtl-sp-init');
+    root.classList.remove('swtl-sp-lock');
+    if (overlay && overlay.parentNode) overlay.parentNode.removeChild(overlay);
+  }
+
+  if (document.body) mount();
+  else document.addEventListener('DOMContentLoaded', mount);
+})();
+</script>
+<!-- ============ end SWTL split-panel preloader ============ -->

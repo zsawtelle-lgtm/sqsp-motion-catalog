@@ -1,0 +1,211 @@
+<!-- ==========================================================
+     SWTL MOTION · 03 COUNTER PRELOADER            v1.0.0
+     Paste into: Settings → Developer Tools → Code Injection → HEADER
+     Docs: presets/03-counter-preloader/INSTALL.md
+     ----------------------------------------------------------
+     0–100 counter + progress bar: eases toward ~90 while waiting,
+     completes only once the page has loaded, then wipes up.
+     Swap the placeholder logo in the <template>. No other edits.
+     ========================================================== -->
+
+<template id="swtl-ct-markup">
+  <div class="swtl-ct-logo">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="1" y="1" width="22" height="22" rx="6" fill="none" stroke="var(--swtl-ink, #1F1E1C)" stroke-width="2"/><line x1="7" y1="17" x2="17" y2="7" stroke="var(--swtl-accent, #D4552B)" stroke-width="2.4" stroke-linecap="round"/></svg>
+    <span>Studio</span>
+  </div>
+  <div class="swtl-ct-label">Loading</div>
+  <div class="swtl-ct-count"><span class="swtl-ct-num">0</span><span class="swtl-ct-pct">%</span></div>
+  <div class="swtl-ct-bar"></div>
+</template>
+
+<style>
+  /* Colors: --swtl-paper / --swtl-ink / --swtl-accent (shared by all presets) */
+  html.swtl-ct-init::before {
+    content: '';
+    position: fixed; inset: 0;
+    background: var(--swtl-paper, #F4F1EA);
+    z-index: 99998;
+  }
+  html.swtl-ct-lock { overflow: hidden !important; }
+
+  #swtl-ct-preloader {
+    --swtl-ct-gutter: clamp(20px, 5vw, 64px);
+    position: fixed; inset: 0;
+    z-index: 99999;
+    background: var(--swtl-paper, #F4F1EA);
+    color: var(--swtl-ink, #1F1E1C);
+    font: inherit;
+    overflow: hidden;
+    transform: translateY(0);
+    transition: transform __WIPE__s __EASE_WIPE__;
+  }
+  #swtl-ct-preloader.swtl-ct-done { transform: translateY(-100%); pointer-events: none; }
+
+  #swtl-ct-preloader .swtl-ct-logo {
+    position: absolute; top: 26px; left: var(--swtl-ct-gutter);
+    display: flex; align-items: center; gap: 10px;
+    font-weight: 600; font-size: 19px; line-height: 24px; letter-spacing: -0.01em;
+    transition: opacity __ROLL__s ease-out;
+  }
+  #swtl-ct-preloader .swtl-ct-logo svg { width: 24px; height: 24px; display: block; }
+  #swtl-ct-preloader .swtl-ct-label {
+    position: absolute; top: 30px; right: var(--swtl-ct-gutter);
+    font-size: 12px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase;
+    opacity: 0.55; transition: opacity __ROLL__s ease-out;
+  }
+  #swtl-ct-preloader .swtl-ct-count {
+    position: absolute; left: var(--swtl-ct-gutter);
+    bottom: calc(var(--swtl-ct-gutter) + var(--swtl-ct-bar-h, 4px));
+    display: flex; align-items: flex-start;
+    font-size: var(--swtl-ct-size, clamp(96px, 17vw, 220px));
+    font-weight: 500; line-height: 0.74; letter-spacing: -0.045em;
+    font-variant-numeric: tabular-nums;
+    clip-path: inset(-0.05em -0.5em 0 -0.1em);
+  }
+  #swtl-ct-preloader .swtl-ct-num,
+  #swtl-ct-preloader .swtl-ct-pct {
+    display: block;
+    transition: transform __ROLL__s __EASE_ROLL__;
+  }
+  #swtl-ct-preloader .swtl-ct-pct {
+    font-size: 0.2em; line-height: 1; letter-spacing: 0;
+    margin-left: 0.25em; color: var(--swtl-accent, #D4552B);
+  }
+  #swtl-ct-preloader .swtl-ct-bar {
+    position: absolute; left: 0; right: 0; bottom: 0;
+    height: var(--swtl-ct-bar-h, 4px);
+    background: var(--swtl-accent, #D4552B);
+    transform: scaleX(0); transform-origin: 0 50%;
+  }
+
+  #swtl-ct-preloader.swtl-ct-exit .swtl-ct-num { transform: translateY(-110%); }
+  #swtl-ct-preloader.swtl-ct-exit .swtl-ct-pct { transform: translateY(-560%); }
+  #swtl-ct-preloader.swtl-ct-exit .swtl-ct-logo,
+  #swtl-ct-preloader.swtl-ct-exit .swtl-ct-label { opacity: 0; }
+
+  #swtl-ct-preloader.swtl-ct-calm { transition: opacity 0.4s ease-out; }
+  #swtl-ct-preloader.swtl-ct-calm.swtl-ct-done { transform: none; opacity: 0; }
+
+  @media (prefers-reduced-motion: reduce) {
+    #swtl-ct-preloader, #swtl-ct-preloader * { transition-duration: 0.01ms !important; }
+  }
+</style>
+
+<script>
+(function () {
+  'use strict';
+
+  /* CONFIG — override with window.SwtlCounter = {...} ABOVE this snippet */
+  var C = {
+    minShow: __MIN_SHOW_MS__,   /* ms before 100 is allowed */
+    maxWait: __MAX_WAIT_MS__,   /* ms fail-safe */
+    oncePerSession: true,
+    crawlTo: __CRAWL__          /* % reached while waiting */
+  };
+  var user = window.SwtlCounter || {};
+  for (var key in user) { if (Object.prototype.hasOwnProperty.call(user, key)) C[key] = user[key]; }
+
+  /* timing — mirrored by the video (timing.py) */
+  var TAU = __TAU__, FINISH = __FINISH__, HOLD = __HOLD__;
+  var ROLL = __ROLL__, WIPE_DELAY = __WIPE_DELAY__, WIPE = __WIPE__;
+
+  /* Never inside the editor frame; ?nopreloader skips it */
+  var framed = true;
+  try { framed = window.self !== window.top; } catch (e) {}
+  if (framed || /[?&]nopreloader\b/.test(location.search)) return;
+
+  var KEY = 'swtlCtShown';
+  if (C.oncePerSession) {
+    try { if (sessionStorage.getItem(KEY) === '1') return; } catch (e) {}
+  }
+
+  var reduced = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+  var root = document.documentElement;
+  root.classList.add('swtl-ct-init');
+  root.classList.add('swtl-ct-lock');
+
+  var overlay, num, bar, t0, pageLoaded = false, readyAt = -1, v0 = 0, shown = -1, done = false;
+  var raf = window.requestAnimationFrame || function (f) { return setTimeout(f, 16); };
+
+  function now() { return window.performance ? performance.now() : Date.now(); }
+
+  function crawl(t) { return C.crawlTo * (1 - Math.exp(-t / TAU)); }
+
+  function paint(v) {
+    var n = v >= 100 ? 100 : Math.floor(v);
+    if (n !== shown) { num.textContent = n; shown = n; }
+    bar.style.transform = 'scaleX(' + (v / 100).toFixed(4) + ')';
+  }
+
+  function tick() {
+    if (!overlay) return;
+    var t = (now() - t0) / 1000, v;
+    if (readyAt < 0) {
+      v = crawl(t);
+    } else {
+      var p = Math.min(1, (t - readyAt) / FINISH);
+      v = v0 + (100 - v0) * (1 - Math.pow(1 - p, 3));
+      if (p >= 1) { paint(100); finish(); return; }
+    }
+    paint(v);
+    raf(tick);
+  }
+
+  function ready() {
+    if (readyAt >= 0 || !overlay) return;
+    readyAt = (now() - t0) / 1000;
+    v0 = crawl(readyAt);
+    if (reduced) { paint(100); finish(); }
+  }
+
+  function tryReady() {
+    if (!pageLoaded) return;
+    var elapsed = now() - t0, min = reduced ? 400 : C.minShow;
+    if (elapsed >= min) ready();
+    else setTimeout(ready, min - elapsed);
+  }
+
+  function finish() {
+    if (done) return;
+    done = true;
+    var calm = reduced;
+    if (calm) overlay.classList.add('swtl-ct-calm');
+    setTimeout(function () {
+      if (!calm) overlay.classList.add('swtl-ct-exit');
+      setTimeout(function () {
+        overlay.classList.add('swtl-ct-done');
+        root.classList.remove('swtl-ct-lock');
+        setTimeout(function () {
+          if (overlay && overlay.parentNode) overlay.parentNode.removeChild(overlay);
+          overlay = null;
+        }, (calm ? 0.4 : WIPE) * 1000 + 100);
+      }, calm ? 0 : WIPE_DELAY * 1000);
+    }, calm ? 0 : HOLD * 1000);
+  }
+
+  function mount() {
+    overlay = document.createElement('div');
+    overlay.id = 'swtl-ct-preloader';
+    overlay.setAttribute('aria-hidden', 'true');
+    var tpl = document.getElementById('swtl-ct-markup');
+    if (tpl && tpl.content) overlay.appendChild(tpl.content.cloneNode(true));
+    num = overlay.querySelector('.swtl-ct-num') || document.createElement('span');
+    bar = overlay.querySelector('.swtl-ct-bar') || document.createElement('div');
+    document.body.insertBefore(overlay, document.body.firstChild);
+    root.classList.remove('swtl-ct-init');
+    t0 = now();
+
+    if (C.oncePerSession) {
+      try { sessionStorage.setItem(KEY, '1'); } catch (e) {}
+    }
+    setTimeout(function () { pageLoaded = true; ready(); }, Math.max(C.maxWait, 1000));
+    if (document.readyState === 'complete') { pageLoaded = true; tryReady(); }
+    else window.addEventListener('load', function () { pageLoaded = true; tryReady(); });
+    if (reduced) paint(0); else raf(tick);
+  }
+
+  if (document.body) mount();
+  else document.addEventListener('DOMContentLoaded', mount);
+})();
+</script>
+<!-- end SWTL counter preloader -->

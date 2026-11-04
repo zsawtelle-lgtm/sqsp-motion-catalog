@@ -1,0 +1,13 @@
+{
+  "id": "03",
+  "slug": "03-counter-preloader",
+  "name": "Counter Preloader",
+  "category": "Preloader",
+  "use": "Big 0–100 counter and accent progress bar that only completes when the page has loaded, then wipes up.",
+  "best_for": ["Agency", "Portfolio", "Photography", "Product launch"],
+  "install": "Header injection",
+  "dependencies": "None",
+  "snippet_kb": 8.0,
+  "status": "beta",
+  "notes": "Progress bar chosen over a fill behind the logo: reads at a glance and becomes the leading edge of the wipe. Video simulates window.load at 2.6s to show the honest park in the 80s."
+}

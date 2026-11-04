@@ -1,0 +1,13 @@
+{
+  "id": "05",
+  "slug": "05-mask-wipe",
+  "name": "Mask / Clip Wipe Reveal",
+  "category": "Scroll reveal",
+  "use": "Editorial curtain wipe: an accent bar sweeps across each image block, then uncovers the photo as it settles from 108% to 100%.",
+  "best_for": ["Architecture", "Interiors", "Editorial", "Portfolio"],
+  "install": "Footer injection + Code Block marker per section",
+  "dependencies": "None",
+  "snippet_kb": 7.9,
+  "status": "beta",
+  "notes": "Direction (right/left/down/up), curtain color (accent/ink) and opt-in text wipe are set per section on the marker. GIF is 0.55 MB at 1280px/20fps."
+}

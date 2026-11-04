@@ -1,0 +1,13 @@
+{
+  "id": "09",
+  "slug": "09-sticky-stack",
+  "name": "Sticky Stacked-Card Scroll",
+  "category": "Scroll effect",
+  "use": "Consecutive sections pin under the header and stack like cards; each covered card shrinks to 0.94 and dims as the next slides over it.",
+  "best_for": ["Agency", "Services overview", "Process steps", "Portfolio"],
+  "install": "Footer injection + Code Block marker",
+  "dependencies": "None",
+  "snippet_kb": 7.9,
+  "status": "beta",
+  "notes": "position: sticky only; section heights untouched. Auto-switches ancestor overflow:hidden to overflow-x:clip (Custom CSS fallback in INSTALL). Off below 768px by default. Not yet verified on a live Squarespace site — real #siteWrapper/#page overflow rules there are unconfirmed."
+}

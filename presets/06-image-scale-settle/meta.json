@@ -1,0 +1,13 @@
+{
+  "id": "06",
+  "slug": "06-image-scale-settle",
+  "name": "Image Scale-Settle",
+  "category": "Scroll reveal",
+  "use": "Images start slightly zoomed and dimmed, then slowly settle to full size and color as they scroll into view. The frame stays fixed.",
+  "best_for": ["Architecture", "Real estate", "Hospitality", "Photography"],
+  "install": "Footer injection + Code Block marker per section",
+  "dependencies": "None",
+  "snippet_kb": 7.9,
+  "status": "beta",
+  "notes": "Transforms only the img/video; block boxes verified identical to the no-script layout in Chrome. Scroll-linked drift is off by default. Not yet tested against live Squarespace gallery sections (selectors based on known 7.1 class names)."
+}

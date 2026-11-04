@@ -1,0 +1,189 @@
+<!-- ==========================================================
+     SWTL MOTION · 06 IMAGE SCALE-SETTLE            v1.0.0
+     Paste into: Settings → Developer Tools → Code Injection → FOOTER
+     Docs: presets/06-image-scale-settle/INSTALL.md
+     ----------------------------------------------------------
+     Mark a section with a Code Block: <div data-swtl-settle hidden></div>
+     ========================================================== -->
+
+<style>
+  /* Starting state. Applies only after the script adds the <html> class. */
+  html.swtl-ss-on .swtl-ss-img {
+    transform: scale(var(--swtl-ss-from, 1.15));
+    filter: brightness(var(--swtl-ss-dim, 0.82)) saturate(var(--swtl-ss-sat, 0.7));
+    transform-origin: 50% 50%;
+    will-change: transform, filter;
+  }
+  /* Settled state: identity transform, full color. */
+  html.swtl-ss-on .swtl-ss-img.swtl-ss-in {
+    transform: none;
+    filter: none;
+    transition:
+      transform var(--swtl-ss-dur, 1.4s) cubic-bezier(.16, 1, .3, 1),
+      filter var(--swtl-ss-dur, 1.4s) cubic-bezier(.16, 1, .3, 1);
+  }
+  html.swtl-ss-on .swtl-ss-img.swtl-ss-done { will-change: auto; }
+  /* only on an img's parent when nothing up to its block clips already */
+  html.swtl-ss-on .swtl-ss-clip { overflow: hidden; overflow: clip; }
+</style>
+
+<script>
+(function () {
+  'use strict';
+
+  /* ---------------- CONFIG ----------------
+     Optional: define window.SwtlScaleSettle = { ... } ABOVE this snippet.
+     A marker can override per section: data-from, data-bg, data-drift.   */
+  var C = {
+    all: false,          /* true = every section, no marker needed */
+    from: 1.15,          /* starting scale */
+    dim: 0.82,           /* starting brightness (1 = none) */
+    saturate: 0.7,       /* starting saturation (1 = none) */
+    duration: 1.4,       /* s, settle length */
+    stagger: 0.12,       /* s between images that enter together */
+    bgImages: true,      /* include the section background image/video */
+    drift: false,        /* true = keep a slow 1 -> 1.04 zoom while scrolling past */
+    driftAmount: 0.04,
+    threshold: 0.15,     /* share of the image visible before it settles */
+    selector: '.sqs-block-image img, .image-block img, .gallery-grid-item img, ' +
+              '.gallery-masonry-item img, .gallery-strips-item img, .sqs-gallery img'
+  };
+  var user = window.SwtlScaleSettle || {};
+  for (var key in user) { if (Object.prototype.hasOwnProperty.call(user, key)) C[key] = user[key]; }
+  /* ----------------------------------------- */
+
+  var framed = true;
+  try { framed = window.self !== window.top; } catch (e) {}
+  if (framed) return;
+  if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  if (!('IntersectionObserver' in window)) return;
+
+  var root = document.documentElement;
+  var EDIT = /\b(sqs-edit-mode-active|sqs-is-page-editing)\b/;
+  var items = [], clips = [], io = null, running = false, rafId = 0, driftOn = false;
+
+  function num(v, d) { var n = parseFloat(v); return isNaN(n) ? d : n; }
+  function flag(v, d) { return v == null ? d : v !== 'false' && v !== '0'; }
+
+  function sections() {
+    if (C.all) return [].slice.call(document.querySelectorAll('section.page-section'));
+    var marks = document.querySelectorAll('[data-swtl-settle]'), out = [];
+    for (var i = 0; i < marks.length; i++) {
+      var s = marks[i].closest('section.page-section');
+      if (s && out.indexOf(s) < 0) { s.swtlSsMark = marks[i]; out.push(s); }
+    }
+    return out;
+  }
+
+  function arm(el, opts) {
+    if (el.classList.contains('swtl-ss-img')) return;
+    var stop = el.closest('.sqs-block, .section-background, section.page-section');
+    var a = el.parentNode, clipped = false;
+    while (a && a.nodeType === 1) {
+      if (/hidden|clip/.test(window.getComputedStyle(a).overflow)) { clipped = true; break; }
+      if (a === stop) break;
+      a = a.parentNode;
+    }
+    if (!clipped && el.parentNode) { el.parentNode.classList.add('swtl-ss-clip'); clips.push(el.parentNode); }
+    el.classList.add('swtl-ss-img');
+    if (opts.from !== C.from) el.style.setProperty('--swtl-ss-from', opts.from);
+    items.push({ el: el, drift: opts.drift });
+    if (opts.drift) driftOn = true;
+  }
+
+  function init() {
+    if (running || EDIT.test(document.body.className)) return;
+    running = true;
+    root.style.setProperty('--swtl-ss-from', C.from);
+    root.style.setProperty('--swtl-ss-dim', C.dim);
+    root.style.setProperty('--swtl-ss-sat', C.saturate);
+    root.style.setProperty('--swtl-ss-dur', C.duration + 's');
+    var secs = sections();
+    for (var i = 0; i < secs.length; i++) {
+      var m = secs[i].swtlSsMark, d = m ? m.dataset : {};
+      var opts = { from: num(d.from, C.from), drift: flag(d.drift, C.drift) };
+      var imgs = secs[i].querySelectorAll(C.selector);
+      for (var j = 0; j < imgs.length; j++) arm(imgs[j], opts);
+      if (flag(d.bg, C.bgImages)) {
+        var bg = secs[i].querySelectorAll('.section-background img, .section-background video');
+        for (var k = 0; k < bg.length; k++) arm(bg[k], opts);
+      }
+    }
+    if (!items.length) { running = false; return; }
+    root.classList.add('swtl-ss-on');
+    io = new IntersectionObserver(onEnter, { threshold: C.threshold, rootMargin: '0px 0px -8% 0px' });
+    requestAnimationFrame(function () { requestAnimationFrame(function () {
+      if (!running) return;
+      for (var n = 0; n < items.length; n++) io.observe(items[n].el);
+      if (driftOn) { window.addEventListener('scroll', queueDrift, { passive: true }); queueDrift(); }
+    }); });
+  }
+
+  function onEnter(entries) {
+    var batch = 0;
+    for (var i = 0; i < entries.length; i++) {
+      if (!entries[i].isIntersecting) continue;
+      var el = entries[i].target;
+      io.unobserve(el);
+      var delay = Math.min(batch++ * C.stagger, 0.6);
+      if (delay) el.style.transitionDelay = delay + 's';
+      el.classList.add('swtl-ss-in');
+      settleLater(el, (C.duration + delay) * 1000 + 100);
+    }
+  }
+
+  function settleLater(el, ms) {
+    setTimeout(function () {
+      if (!running) return;
+      el.classList.add('swtl-ss-done');
+      el.style.transitionDelay = '';
+    }, ms);
+  }
+
+  /* drift: individual `scale` property, stacks on the settle transform */
+  function queueDrift() { if (!rafId) rafId = requestAnimationFrame(drift); }
+  function drift() {
+    rafId = 0;
+    var vh = window.innerHeight;
+    for (var i = 0; i < items.length; i++) {
+      if (!items[i].drift) continue;
+      var r = items[i].el.getBoundingClientRect();
+      if (r.bottom < 0 || r.top > vh) continue;
+      var p = Math.max(0, Math.min(1, (vh - r.top) / (vh + r.height)));
+      items[i].el.style.scale = (1 + C.driftAmount * p).toFixed(4);
+    }
+  }
+
+  function teardown() {
+    if (!running) return;
+    running = false;
+    if (io) { io.disconnect(); io = null; }
+    window.removeEventListener('scroll', queueDrift);
+    if (rafId) { cancelAnimationFrame(rafId); rafId = 0; }
+    for (var i = 0; i < items.length; i++) {
+      var el = items[i].el;
+      el.classList.remove('swtl-ss-img', 'swtl-ss-in', 'swtl-ss-done');
+      el.style.removeProperty('--swtl-ss-from');
+      el.style.transitionDelay = '';
+      el.style.scale = '';
+      if (!el.getAttribute('style')) el.removeAttribute('style');
+    }
+    for (var j = 0; j < clips.length; j++) clips[j].classList.remove('swtl-ss-clip');
+    items = []; clips = []; driftOn = false;
+    root.classList.remove('swtl-ss-on');
+    ['--swtl-ss-from', '--swtl-ss-dim', '--swtl-ss-sat', '--swtl-ss-dur'].forEach(function (p) { root.style.removeProperty(p); });
+    if (!root.getAttribute('style')) root.removeAttribute('style');
+  }
+
+  function start() {
+    init();
+    new MutationObserver(function () {
+      if (EDIT.test(document.body.className)) teardown(); else init();
+    }).observe(document.body, { attributes: true, attributeFilter: ['class'] });
+  }
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start);
+  else start();
+})();
+</script>
+<!-- ============ end SWTL image scale-settle ============ -->

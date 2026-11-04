@@ -1,0 +1,204 @@
+<!-- ==========================================================
+     SWTL MOTION · 09 STICKY STACKED-CARD SCROLL     v1.0.0
+     Paste into: Settings → Developer Tools → Code Injection → FOOTER
+     Activate:   a Code Block in the FIRST section of the stack with
+                 <div data-swtl-stack data-count="3" hidden></div>
+     Docs: presets/09-sticky-stack/INSTALL.md
+     ========================================================== -->
+
+<style>
+  .page-section.swtl-sk-card {
+    position: -webkit-sticky;
+    position: sticky;
+    top: var(--swtl-sk-top, 0px);
+    transform-origin: 50% 0;
+    will-change: transform;
+    isolation: isolate;
+  }
+  /* dim layer */
+  .page-section.swtl-sk-card::after {
+    content: '';
+    position: absolute; inset: 0;
+    background: var(--swtl-sk-shade-color, var(--swtl-ink, #1F1E1C));
+    opacity: var(--swtl-sk-shade, 0);
+    pointer-events: none;
+    z-index: 50;
+  }
+  /* rounded top corners on every incoming card */
+  .page-section.swtl-sk-round {
+    clip-path: inset(0 round var(--swtl-sk-radius, 24px) var(--swtl-sk-radius, 24px) 0 0);
+  }
+  /* the last card + everything after it paint above the pinned cards */
+  .page-section.swtl-sk-after { position: relative; }
+  /* sticky fails under overflow:hidden; clip does not */
+  .swtl-sk-unclip { overflow-x: clip !important; overflow-y: visible !important; }
+</style>
+
+<script>
+(function () {
+  'use strict';
+
+  /* CONFIG — override with window.SwtlStack = {…} above this snippet,
+     or per stack with data-count/-scale/-dim/-radius on the marker. */
+  var C = {
+    headerOffset: 'auto',   /* 'auto' = height of a fixed/sticky header, or px */
+    scale: 0.94,            /* covered card shrinks to this */
+    dim: 0.35,              /* max opacity of the dim layer */
+    radius: 24,             /* px, top corners of incoming cards */
+    mobileBreakpoint: 768,  /* below this width ... */
+    disableOnMobile: true   /* ... sections scroll normally */
+  };
+  var user = window.SwtlStack || {};
+  for (var key in user) { if (Object.prototype.hasOwnProperty.call(user, key)) C[key] = user[key]; }
+
+  var framed = true;
+  try { framed = window.self !== window.top; } catch (e) {}
+  if (framed) return;
+
+  var EDIT = ['sqs-edit-mode-active', 'sqs-is-page-editing'];
+  var CLS = ['swtl-sk-card', 'swtl-sk-round', 'swtl-sk-after', 'swtl-sk-unclip'];
+  var PROPS = ['transform', '--swtl-sk-top', '--swtl-sk-shade', '--swtl-sk-radius'];
+  var stacks = [], touched = [], on = false, raf = 0;
+  var rm = window.matchMedia ? window.matchMedia('(prefers-reduced-motion: reduce)') : null;
+
+  function num(v, d) { v = parseFloat(v); return isNaN(v) ? d : v; }
+  function clamp(x) { return x < 0 ? 0 : x > 1 ? 1 : x; }
+  function mark(el, c) { el.classList.add(c); if (touched.indexOf(el) < 0) touched.push(el); }
+  function isSection(el) { return el && el.matches && el.matches('section.page-section'); }
+
+  function editing() {
+    var b = document.body;
+    for (var i = 0; i < EDIT.length; i++) if (b.classList.contains(EDIT[i])) return true;
+    return false;
+  }
+  function wanted() {
+    if (editing()) return false;
+    return !(C.disableOnMobile && window.innerWidth < C.mobileBreakpoint);
+  }
+  function motion() { return !(rm && rm.matches); }
+
+  function headerOffset() {
+    if (C.headerOffset !== 'auto') return num(C.headerOffset, 0);
+    var h = document.querySelector('#header, header.header');
+    if (!h) return 0;
+    var pos = window.getComputedStyle(h).position;
+    if (pos !== 'fixed' && pos !== 'sticky') return 0;
+    return Math.max(0, Math.round(h.getBoundingClientRect().bottom));
+  }
+
+  function unclip(from) {
+    var el = from.parentElement, html = document.documentElement;
+    while (el && el !== html) {
+      var cs = window.getComputedStyle(el);
+      var clipped = /hidden|auto|scroll/.test(cs.overflowX + ' ' + cs.overflowY);
+      var propagated = el === document.body && window.getComputedStyle(html).overflowX === 'visible' &&
+                       window.getComputedStyle(html).overflowY === 'visible';
+      if (clipped && !propagated) mark(el, 'swtl-sk-unclip');
+      el = el.parentElement;
+    }
+  }
+
+  function build() {
+    var markers = document.querySelectorAll('[data-swtl-stack]');
+    for (var m = 0; m < markers.length; m++) {
+      var mk = markers[m], first = mk.closest('section.page-section');
+      if (!first || first.classList.contains('swtl-sk-card')) continue;
+      var n = Math.max(2, parseInt(mk.getAttribute('data-count'), 10) || 3);
+      var cards = [first], s = first;
+      while (cards.length < n && (s = s.nextElementSibling)) if (isSection(s)) cards.push(s);
+      if (cards.length < 2) continue;
+      var st = {
+        cards: cards, tops: [],
+        scale: num(mk.getAttribute('data-scale'), C.scale),
+        dim: num(mk.getAttribute('data-dim'), C.dim)
+      };
+      var radius = num(mk.getAttribute('data-radius'), C.radius);
+      for (var i = 0; i < cards.length; i++) {
+        if (i < cards.length - 1) mark(cards[i], 'swtl-sk-card');
+        if (i > 0) { mark(cards[i], 'swtl-sk-round'); cards[i].style.setProperty('--swtl-sk-radius', radius + 'px'); }
+      }
+      for (s = cards[cards.length - 1]; s; s = s.nextElementSibling) mark(s, 'swtl-sk-after');
+      unclip(first);
+      stacks.push(st);
+    }
+  }
+
+  /* a card taller than the viewport pins by its bottom edge */
+  function measure() {
+    var off = headerOffset(), ih = window.innerHeight;
+    for (var k = 0; k < stacks.length; k++) {
+      var st = stacks[k];
+      for (var i = 0; i < st.cards.length; i++) {
+        var top = Math.min(off, ih - st.cards[i].offsetHeight);
+        st.tops[i] = top;
+        st.cards[i].style.setProperty('--swtl-sk-top', top + 'px');
+      }
+    }
+  }
+
+  function frame() {
+    raf = 0;
+    if (!on || !motion()) return;
+    var ih = window.innerHeight, k, i, st, writes = [];
+    for (k = 0; k < stacks.length; k++) {               /* read pass */
+      st = stacks[k];
+      for (i = 0; i < st.cards.length - 1; i++) {
+        var r = st.cards[i + 1].getBoundingClientRect().top;
+        var end = st.tops[i + 1];
+        writes.push([st.cards[i], clamp((ih - r) / Math.max(1, ih - end)), st]);
+      }
+    }
+    for (i = 0; i < writes.length; i++) {               /* write pass: transform + opacity only */
+      var c = writes[i][0], p = writes[i][1], s = writes[i][2];
+      c.style.transform = p > 0 ? 'scale(' + (1 - (1 - s.scale) * p).toFixed(4) + ')' : '';
+      c.style.setProperty('--swtl-sk-shade', (s.dim * p).toFixed(3));
+    }
+  }
+  function request() { if (!raf) raf = window.requestAnimationFrame(frame); }
+  function onResize() { if (!sync() && on) { measure(); request(); } }
+
+  function enable() {
+    build();
+    if (!stacks.length) return;
+    on = true;
+    measure();
+    frame();
+    window.addEventListener('scroll', request, { passive: true });
+  }
+
+  function disable() {
+    on = false;
+    if (raf) window.cancelAnimationFrame(raf);
+    raf = 0;
+    window.removeEventListener('scroll', request);
+    for (var i = 0; i < touched.length; i++) {
+      for (var j = 0; j < CLS.length; j++) touched[i].classList.remove(CLS[j]);
+      for (j = 0; j < PROPS.length; j++) touched[i].style.removeProperty(PROPS[j]);
+      if (!touched[i].getAttribute('style')) touched[i].removeAttribute('style');
+    }
+    touched = []; stacks = [];
+  }
+
+  /* returns true when it changed state */
+  function sync() {
+    var w = wanted();
+    if (w && !on) { enable(); return true; }
+    if (!w && on) { disable(); return true; }
+    return false;
+  }
+
+  function init() {
+    sync();
+    new MutationObserver(sync).observe(document.body, { attributes: true, attributeFilter: ['class'] });
+    window.addEventListener('resize', onResize);
+    if (rm) {
+      var reset = function () { disable(); sync(); };
+      if (rm.addEventListener) rm.addEventListener('change', reset); else if (rm.addListener) rm.addListener(reset);
+    }
+  }
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+  else init();
+})();
+</script>
+<!-- ============ end SWTL sticky stacked-card scroll ============ -->

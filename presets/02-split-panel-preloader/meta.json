@@ -1,0 +1,13 @@
+{
+  "id": "02",
+  "slug": "02-split-panel-preloader",
+  "name": "Split-Panel Preloader",
+  "category": "Preloader",
+  "use": "Solid panels hold the logo over a running accent line, then slide apart to reveal the page.",
+  "best_for": ["Agency", "Fashion", "Portfolio", "Hospitality"],
+  "install": "Header injection",
+  "dependencies": "None",
+  "snippet_kb": 13.3,
+  "status": "beta",
+  "notes": "Over the 8 KB budget because of the outlined placeholder wordmark (~4 KB) plus config and multi-panel logic; a client logo replaces it. Panel count and direction are configurable (vertical halves default)."
+}

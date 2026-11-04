@@ -1,0 +1,187 @@
+<!-- ==========================================================
+     SWTL MOTION · 04 STAGGERED BLOCK RISE          v1.0.0
+     Paste into: Settings → Developer Tools → Code Injection → FOOTER
+     Docs: presets/04-block-rise/INSTALL.md
+     ----------------------------------------------------------
+     When a Fluid Engine section scrolls into view, its blocks rise
+     and fade in, one after another, in reading order (top row first,
+     left to right). Plays once per page view.
+     Default: only sections that hold the marker Code Block
+       <div data-swtl-rise hidden></div>
+     Sitewide: window.SwtlBlockRise = { allSections: true } above this.
+     ========================================================== -->
+
+<style>
+  /* Hidden state exists only while the script adds html.swtl-br-on.
+     If the script is skipped or fails, every block shows as normal. */
+  /* transition only on the way in, so hiding is instant (no fade-out flash) */
+  html.swtl-br-on .swtl-br-block.swtl-br-in {
+    transition:
+      opacity var(--swtl-br-dur, 0.8s) var(--swtl-br-ease, cubic-bezier(.22,1,.36,1)) var(--swtl-br-delay, 0s),
+      transform var(--swtl-br-dur, 0.8s) var(--swtl-br-ease, cubic-bezier(.22,1,.36,1)) var(--swtl-br-delay, 0s);
+  }
+  html.swtl-br-on .swtl-br-block:not(.swtl-br-in) {
+    opacity: 0;
+    transform: translate3d(0, var(--swtl-br-distance, 28px), 0);
+  }
+</style>
+
+<script>
+(function () {
+  'use strict';
+
+  /* ---------------- CONFIG ----------------
+     Optional: define window.SwtlBlockRise = { ... } ABOVE this snippet.
+     Per section: put data-distance / data-duration / data-stagger /
+     data-easing on the marker div to override these for that section. */
+  var C = {
+    allSections: false,     /* true = every section on every page */
+    skipFirst: true,        /* with allSections: leave the first (hero) section alone */
+    distance: 28,           /* px the blocks rise */
+    duration: 0.8,          /* s per block */
+    stagger: 0.08,          /* s between blocks */
+    maxDelay: 0.9,          /* s cap, so a 20-block section does not drag */
+    easing: 'cubic-bezier(.22,1,.36,1)',
+    rootMargin: '0px 0px -8% 0px'  /* start a little before the block is fully in */
+  };
+  var user = window.SwtlBlockRise || {};
+  for (var key in user) { if (Object.prototype.hasOwnProperty.call(user, key)) C[key] = user[key]; }
+  /* ----------------------------------------- */
+
+  /* Never run inside the Squarespace editor frame. */
+  var framed = true;
+  try { framed = window.self !== window.top; } catch (e) {}
+  if (framed || !('IntersectionObserver' in window)) return;
+  if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+
+  var root = document.documentElement;
+  var MARK = '[data-swtl-rise]';
+  var VARS = ['--swtl-br-distance', '--swtl-br-dur', '--swtl-br-ease', '--swtl-br-delay'];
+  var io = null, blocks = [], timers = [], done = [], running = false;
+
+  function editing() {
+    var b = document.body.classList;
+    return b.contains('sqs-edit-mode-active') || b.contains('sqs-is-page-editing');
+  }
+
+  function num(v, d) { var n = parseFloat(v); return isNaN(n) ? d : n; }
+
+  function settings(section) {
+    var m = section.querySelector(MARK), s = {};
+    s.distance = num(m && m.getAttribute('data-distance'), C.distance);
+    s.duration = num(m && m.getAttribute('data-duration'), C.duration);
+    s.stagger = num(m && m.getAttribute('data-stagger'), C.stagger);
+    s.easing = (m && m.getAttribute('data-easing')) || C.easing;
+    return s;
+  }
+
+  function sections() {
+    var all = document.querySelectorAll('section.page-section'), out = [], first = true;
+    for (var i = 0; i < all.length; i++) {
+      var sec = all[i];
+      if (sec.closest('footer')) continue;          /* site footer sections */
+      var m = sec.querySelector(MARK);
+      var off = m && m.getAttribute('data-swtl-rise') === 'off';
+      var isFirst = first; first = false;
+      if (off) continue;
+      if (m || (C.allSections && !(C.skipFirst && isFirst))) out.push(sec);
+    }
+    return out;
+  }
+
+  /* Reading order: rendered top, then left. Fluid Engine DOM order
+     follows when a block was added, not where it sits. */
+  function byPosition(a, b) {
+    var dy = a.top - b.top;
+    return Math.abs(dy) > 8 ? dy : a.left - b.left;
+  }
+
+  function collect() {
+    var secs = sections(), list = [];
+    for (var i = 0; i < secs.length; i++) {
+      var s = settings(secs[i]);
+      var els = secs[i].querySelectorAll('.fe-block'), group = [];
+      for (var j = 0; j < els.length; j++) {
+        var el = els[j];
+        if (el.querySelector(MARK) || done.indexOf(el) > -1) continue;  /* skip the marker's own block */
+        var r = el.getBoundingClientRect();
+        group.push({ el: el, top: r.top, left: r.left, s: s });
+      }
+      group.sort(byPosition);
+      for (var k = 0; k < group.length; k++) { group[k].order = list.length; list.push(group[k]); }
+    }
+    return list;
+  }
+
+  function clean(el) {
+    el.classList.remove('swtl-br-block', 'swtl-br-in');
+    for (var i = 0; i < VARS.length; i++) el.style.removeProperty(VARS[i]);
+    if (el.getAttribute('style') === '') el.removeAttribute('style');
+  }
+
+  function find(el) {
+    for (var i = 0; i < blocks.length; i++) if (blocks[i].el === el) return blocks[i];
+    return null;
+  }
+
+  function reveal(entries) {
+    var batch = [];
+    for (var i = 0; i < entries.length; i++) {
+      if (!entries[i].isIntersecting) continue;
+      var b = find(entries[i].target);
+      if (b && !b.shown) batch.push(b);
+    }
+    batch.sort(function (a, b) { return a.order - b.order; });
+    for (var j = 0; j < batch.length; j++) {
+      var it = batch[j], delay = Math.min(j * it.s.stagger, C.maxDelay);
+      it.shown = true;
+      io.unobserve(it.el);
+      it.el.style.setProperty('--swtl-br-delay', delay + 's');
+      it.el.classList.add('swtl-br-in');
+      /* once at rest, hand the block back untouched */
+      timers.push(setTimeout((function (x) {
+        return function () { clean(x.el); done.push(x.el); };
+      })(it), Math.round((delay + it.s.duration) * 1000) + 80));
+    }
+  }
+
+  function init() {
+    if (running || editing()) return;
+    blocks = collect();
+    if (!blocks.length) return;
+    running = true;
+    for (var i = 0; i < blocks.length; i++) {
+      var b = blocks[i];
+      b.el.style.setProperty('--swtl-br-distance', b.s.distance + 'px');
+      b.el.style.setProperty('--swtl-br-dur', b.s.duration + 's');
+      b.el.style.setProperty('--swtl-br-ease', b.s.easing);
+      b.el.classList.add('swtl-br-block');
+    }
+    root.classList.add('swtl-br-on');
+    io = new IntersectionObserver(reveal, { rootMargin: C.rootMargin, threshold: 0 });
+    for (var j = 0; j < blocks.length; j++) io.observe(blocks[j].el);
+  }
+
+  function teardown() {
+    if (io) { io.disconnect(); io = null; }
+    for (var i = 0; i < timers.length; i++) clearTimeout(timers[i]);
+    timers = [];
+    for (var j = 0; j < blocks.length; j++) clean(blocks[j].el);
+    blocks = [];
+    root.classList.remove('swtl-br-on');
+    running = false;
+  }
+
+  function start() {
+    init();
+    /* Squarespace editor: tear down on edit, re-init on exit. */
+    new MutationObserver(function () {
+      if (editing()) teardown(); else init();
+    }).observe(document.body, { attributes: true, attributeFilter: ['class'] });
+  }
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start);
+  else start();
+})();
+</script>
+<!-- ============ end SWTL staggered block rise ============ -->

@@ -1,0 +1,191 @@
+<!-- ==========================================================
+     SWTL MOTION · 05 MASK / CLIP WIPE REVEAL          v1.0.0
+     Paste into: Settings → Developer Tools → Code Injection → FOOTER
+     Per section: Code Block with <div data-swtl-wipe hidden></div>
+     Docs: presets/05-mask-wipe/INSTALL.md
+     ========================================================== -->
+
+<style>
+  /* Colors: --swtl-accent / --swtl-ink; --swtl-mw-curtain overrides. */
+  .swtl-mw-item > .sqs-block-content { position: relative; }
+  .swtl-mw-curtain {
+    position: absolute; top: 0; right: 0; bottom: 0; left: 0;
+    z-index: 2; pointer-events: none;
+    background: var(--swtl-mw-curtain, var(--swtl-accent, #D4552B));
+  }
+  .swtl-mw-ink .swtl-mw-curtain { background: var(--swtl-mw-curtain, var(--swtl-ink, #1F1E1C)); }
+
+  /* a = hidden edge, b = exit edge */
+  .swtl-mw-right { --swtl-mw-a: inset(0 100% 0 0); --swtl-mw-b: inset(0 0 0 100%); }
+  .swtl-mw-left  { --swtl-mw-a: inset(0 0 0 100%); --swtl-mw-b: inset(0 100% 0 0); }
+  .swtl-mw-down  { --swtl-mw-a: inset(0 0 100% 0); --swtl-mw-b: inset(100% 0 0 0); }
+  .swtl-mw-up    { --swtl-mw-a: inset(100% 0 0 0); --swtl-mw-b: inset(0 0 100% 0); }
+
+  /* hidden state only while the script runs */
+  html.swtl-mw-on .swtl-mw-item > .sqs-block-content > *,
+  html.swtl-mw-on .swtl-mw-item .swtl-mw-curtain { clip-path: var(--swtl-mw-a); }
+
+  /* curtain: in 0.55s, hold 0.07s, out 0.68s (1.30s total) */
+  @keyframes swtl-mw-curtain {
+    0%     { clip-path: var(--swtl-mw-a); animation-timing-function: cubic-bezier(.65,0,.35,1); }
+    42.31% { clip-path: inset(0 0 0 0); }
+    47.69% { clip-path: inset(0 0 0 0); animation-timing-function: cubic-bezier(.65,0,.35,1); }
+    100%   { clip-path: var(--swtl-mw-b); }
+  }
+  @keyframes swtl-mw-uncover { from { clip-path: var(--swtl-mw-a); } to { clip-path: inset(0 0 0 0); } }
+  @keyframes swtl-mw-settle  { from { transform: scale(1.08); } to { transform: scale(1); } }
+
+  html.swtl-mw-on .swtl-mw-go .swtl-mw-curtain {
+    animation: swtl-mw-curtain 1.3s linear var(--swtl-mw-delay, 0s) both;
+  }
+  html.swtl-mw-on .swtl-mw-go > .sqs-block-content > :not(.swtl-mw-curtain) {
+    animation: swtl-mw-uncover 0.68s cubic-bezier(.65,0,.35,1) calc(var(--swtl-mw-delay, 0s) + 0.62s) both;
+  }
+  html.swtl-mw-on .swtl-mw-go img,
+  html.swtl-mw-on .swtl-mw-go video {
+    animation: swtl-mw-settle 1.2s cubic-bezier(.33,1,.68,1) calc(var(--swtl-mw-delay, 0s) + 0.62s) both;
+  }
+  html.swtl-mw-on .swtl-mw-go.swtl-mw-text > .sqs-block-content > * {
+    animation: swtl-mw-uncover 0.8s cubic-bezier(.65,0,.35,1) var(--swtl-mw-delay, 0s) both;
+  }
+</style>
+
+<script>
+(function () {
+  'use strict';
+
+  /* CONFIG: window.SwtlMaskWipe = {...} above this snippet overrides
+     these; marker data-* attributes override per section. */
+  var C = {
+    direction: 'right',   /* right | left | down | up */
+    curtain: 'accent',    /* accent | ink */
+    text: false,          /* text blocks: plain clip wipe */
+    video: true,
+    stagger: 0.28,        /* s between blocks revealing together */
+    threshold: 0.2
+  };
+  var user = window.SwtlMaskWipe || {};
+  for (var key in user) { if (Object.prototype.hasOwnProperty.call(user, key)) C[key] = user[key]; }
+
+  var BLOCK_MS = 1820, TEXT_MS = 800;
+  var DIRS = { right: 1, left: 1, down: 1, up: 1 };
+  var ALIAS = { ltr: 'right', rtl: 'left', ttb: 'down', btt: 'up' };
+
+  var framed = true;
+  try { framed = window.self !== window.top; } catch (e) {}
+  if (framed) return;
+  if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  if (!('IntersectionObserver' in window)) return;
+
+  var root = document.documentElement;
+  var body = document.body;
+  var io = null, items = [], timers = [], lastStart = 0, running = false;
+  var CLASSES = 'item go text ink right left down up'.split(' ');
+
+  function editing() {
+    return body.classList.contains('sqs-edit-mode-active') ||
+           body.classList.contains('sqs-is-page-editing');
+  }
+  function opt(marker, name, fallback) {
+    var v = marker.getAttribute('data-' + name);
+    if (v === null || v === '') return fallback;
+    if (v === 'true') return true;
+    if (v === 'false') return false;
+    return v;
+  }
+
+  function clean(block) {
+    var c = block.querySelector('.swtl-mw-curtain');
+    if (c && c.parentNode) c.parentNode.removeChild(c);
+    for (var i = 0; i < CLASSES.length; i++) block.classList.remove('swtl-mw-' + CLASSES[i]);
+    block.style.removeProperty('--swtl-mw-delay');
+    if (block.getAttribute('style') === '') block.removeAttribute('style');
+  }
+
+  function reveal(block) {
+    var now = Date.now();
+    var start = Math.max(now, lastStart + (block._swtlMwStagger * 1000));
+    lastStart = start;
+    var delay = (start - now) / 1000;
+    block.style.setProperty('--swtl-mw-delay', delay.toFixed(3) + 's');
+    block.classList.add('swtl-mw-go');
+    var ms = (block.classList.contains('swtl-mw-text') ? TEXT_MS : BLOCK_MS) + delay * 1000 + 60;
+    timers.push(setTimeout(function () { clean(block); }, ms));
+  }
+
+  function onIntersect(entries) {
+    var hits = [];
+    for (var i = 0; i < entries.length; i++) {
+      if (entries[i].isIntersecting) { hits.push(entries[i]); io.unobserve(entries[i].target); }
+    }
+    hits.sort(function (a, b) {
+      return (a.boundingClientRect.top - b.boundingClientRect.top) ||
+             (a.boundingClientRect.left - b.boundingClientRect.left);
+    });
+    for (var j = 0; j < hits.length; j++) reveal(hits[j].target);
+  }
+
+  function prep(marker) {
+    var section = marker.closest('section.page-section');
+    if (!section) return;
+    var dir = String(opt(marker, 'direction', C.direction)).toLowerCase();
+    dir = ALIAS[dir] || dir;
+    if (!DIRS[dir]) dir = 'right';
+    var ink = opt(marker, 'curtain', C.curtain) === 'ink';
+    var sel = '.sqs-block.image-block';
+    if (opt(marker, 'video', C.video)) sel += ', .sqs-block.video-block';
+    if (opt(marker, 'text', C.text)) sel += ', .sqs-block.html-block';
+    var stagger = parseFloat(opt(marker, 'stagger', C.stagger));
+    if (isNaN(stagger)) stagger = 0.28;
+    var blocks = section.querySelectorAll(sel);
+    for (var i = 0; i < blocks.length; i++) {
+      var b = blocks[i], content = b.querySelector(':scope > .sqs-block-content');
+      if (!content || b.classList.contains('swtl-mw-item')) continue;
+      var isText = b.classList.contains('html-block');
+      b.classList.add('swtl-mw-item', 'swtl-mw-' + dir);
+      if (ink) b.classList.add('swtl-mw-ink');
+      if (isText) b.classList.add('swtl-mw-text');
+      else {
+        var cur = document.createElement('span');
+        cur.className = 'swtl-mw-curtain';
+        cur.setAttribute('aria-hidden', 'true');
+        content.appendChild(cur);
+      }
+      b._swtlMwStagger = stagger;
+      items.push(b);
+    }
+  }
+
+  function init() {
+    if (running || editing()) return;
+    var markers = document.querySelectorAll('[data-swtl-wipe]');
+    if (!markers.length) return;
+    running = true;
+    items = []; lastStart = 0;
+    for (var i = 0; i < markers.length; i++) prep(markers[i]);
+    if (!items.length) { running = false; return; }
+    io = new IntersectionObserver(onIntersect, { threshold: C.threshold, rootMargin: '0px 0px -10% 0px' });
+    root.classList.add('swtl-mw-on');
+    for (var j = 0; j < items.length; j++) io.observe(items[j]);
+  }
+
+  function teardown() {
+    if (io) { io.disconnect(); io = null; }
+    for (var i = 0; i < timers.length; i++) clearTimeout(timers[i]);
+    timers = [];
+    for (var j = 0; j < items.length; j++) clean(items[j]);
+    items = [];
+    root.classList.remove('swtl-mw-on');
+    running = false;
+  }
+
+  /* editor: tear down on edit, re-init on exit */
+  new MutationObserver(function () {
+    if (editing()) { if (running) teardown(); } else if (!running) init();
+  }).observe(body, { attributes: true, attributeFilter: ['class'] });
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+  else init();
+})();
+</script>
+<!-- ============ end SWTL mask / clip wipe ============ -->
