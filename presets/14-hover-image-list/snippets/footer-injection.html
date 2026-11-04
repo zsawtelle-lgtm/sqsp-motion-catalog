@@ -87,8 +87,8 @@
     if (!links.length) return;
     var s = { ease: opt(m, 'ease', C.ease), tilt: opt(m, 'tilt', C.tilt), maxTilt: opt(m, 'max-tilt', C.maxTilt) };
     var follow = mq.matches && !reduced, hover = mq.matches;
-    var L = { list: list, rows: [], added: [], marks: [], on: [], float: null };
-    L.marks.push([list, 'swtl-hl-list' + (opt(m, 'big-type', C.bigType) ? ' swtl-hl-big' : '') + (hover ? ' swtl-hl-hover' : ' swtl-hl-touch')]);
+    var L = { list: list, rows: [], added: [], marks: [], on: [] };
+    L.marks.push([list, 'swtl-hl-list' + (opt(m, 'big-type', C.bigType) ? ' swtl-hl-big' : '')]);
 
     /* image blocks: one with the same click-through link pairs first, the rest in order */
     var blocks = [].slice.call(sec.querySelectorAll('.sqs-block.image-block')).filter(function (b) { return b.querySelector('img'); });

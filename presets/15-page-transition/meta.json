@@ -1,0 +1,18 @@
+{
+  "id": "15",
+  "slug": "15-page-transition",
+  "name": "Page Transition Wipe",
+  "category": "Page transition",
+  "use": "Sitewide page-to-page wipe: an ink panel rises over the page on an internal link click, then lifts off the next page as soon as its HTML is ready.",
+  "best_for": [
+    "Agency",
+    "Portfolio",
+    "Architecture",
+    "Fashion"
+  ],
+  "install": "Header injection",
+  "dependencies": "None",
+  "snippet_kb": 9.8,
+  "status": "beta",
+  "notes": "Over the 8 KB budget (9.8 KB) because of the link skip rules (modifier/middle clicks, _blank, download, same-page hash, mailto/tel, external, commerce paths, files, galleries/lightboxes, opt-out), bfcache handling and the three fail-safes. Full page loads only, no SPA. Coexists with preloaders 01-03 when they stay once per session."
+}
