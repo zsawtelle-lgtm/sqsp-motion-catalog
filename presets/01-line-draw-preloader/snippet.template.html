@@ -1,0 +1,181 @@
+<!-- ==========================================================
+     SWTL MOTION · 01 LINE-DRAW PRELOADER          v1.0.0
+     Paste into: Settings → Developer Tools → Code Injection → HEADER
+     Docs: presets/01-line-draw-preloader/INSTALL.md
+     ----------------------------------------------------------
+     Draws any outlined SVG logo: open shapes stroke-draw, filled
+     shapes trace their contour then ink in. Swap the <svg> inside
+     the <template> for the client's outlined logo — no other edits.
+     ========================================================== -->
+
+<template id="swtl-ld-markup">__MARKUP__</template>
+
+<style>
+  /* Colors: set --swtl-paper / --swtl-ink / --swtl-accent once in
+     Custom CSS to restyle every SWTL motion preset at the same time. */
+  html.swtl-ld-init::before {
+    content: '';
+    position: fixed; inset: 0;
+    background: var(--swtl-paper, #F4F1EA);
+    z-index: 99998;
+  }
+  html.swtl-ld-lock { overflow: hidden !important; }
+
+  #swtl-ld-preloader {
+    position: fixed; inset: 0;
+    z-index: 99999;
+    background: var(--swtl-paper, #F4F1EA);
+    display: flex; align-items: center; justify-content: center;
+    opacity: 1;
+    transition: opacity 0.55s cubic-bezier(.65,0,.35,1);
+  }
+  #swtl-ld-preloader.swtl-ld-done { opacity: 0; pointer-events: none; }
+
+  #swtl-ld-preloader .swtl-ld-mark {
+    width: var(--swtl-ld-size, min(360px, 64vw));
+    height: auto;
+    overflow: visible;
+  }
+  #swtl-ld-preloader .swtl-ld-line   { stroke: var(--swtl-ink, #1F1E1C); }
+  #swtl-ld-preloader .swtl-ld-accent { stroke: var(--swtl-accent, #D4552B); }
+  #swtl-ld-preloader .swtl-ld-fill   { fill: var(--swtl-ink, #1F1E1C); }
+
+  @keyframes swtl-ld-draw  { to { stroke-dashoffset: 0; } }
+  @keyframes swtl-ld-ink   { to { fill-opacity: 1; stroke-opacity: 0; } }
+  @keyframes swtl-ld-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+
+  @media (prefers-reduced-motion: reduce) {
+    #swtl-ld-preloader * {
+      animation-duration: 0.01ms !important;
+      animation-delay: 0s !important;
+      animation-iteration-count: 1 !important;
+    }
+  }
+</style>
+
+<script>
+(function () {
+  'use strict';
+
+  /* ---------------- CONFIG ----------------
+     Optional: define window.SwtlLineDraw = { ... } ABOVE this snippet
+     to override any value without editing the code below.            */
+  var C = {
+    minShow: 'auto',        /* ms, or 'auto' = intro length + 950ms hold */
+    maxWait: 8000,          /* ms — fail-safe: never trap a visitor */
+    oncePerSession: true,   /* false = play on every page load */
+    speed: 1                /* 1 = default timing, 1.25 = 25% faster */
+  };
+  var user = window.SwtlLineDraw || {};
+  for (var key in user) { if (Object.prototype.hasOwnProperty.call(user, key)) C[key] = user[key]; }
+  /* ----------------------------------------- */
+
+  /* timing — mirrored exactly by the video scene (mark.py) */
+  var DELAY = 0.20, STAGGER_MAX = 0.22, STAGGER_SPAN = 1.80;
+  var STROKE_DUR = 0.90, TRACE_DUR = 0.50, INK_AT = 0.32, INK_DUR = 0.40;
+  var EASE_DRAW = 'cubic-bezier(.65,0,.35,1)', EASE_INK = 'cubic-bezier(.22,1,.36,1)';
+  var TRACE_PX = 1.4;       /* on-screen contour width while tracing */
+
+  /* Never run inside the Squarespace editor (the site loads in a frame),
+     and allow ?nopreloader for quick checks. */
+  var framed = true;
+  try { framed = window.self !== window.top; } catch (e) {}
+  if (framed || /[?&]nopreloader\b/.test(location.search)) return;
+
+  var KEY = 'swtlLdShown';
+  if (C.oncePerSession) {
+    try { if (sessionStorage.getItem(KEY) === '1') return; } catch (e) {}
+  }
+
+  var reduced = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+  var root = document.documentElement;
+  root.classList.add('swtl-ld-init');
+  root.classList.add('swtl-ld-lock');
+
+  var overlay, startTime, minShow = 400, pageLoaded = false, dismissed = false;
+
+  function choreograph(svg) {
+    var nodes = svg.querySelectorAll('path, line, rect, circle, ellipse, polyline, polygon');
+    var els = [];
+    for (var i = 0; i < nodes.length; i++) {
+      if (!nodes[i].hasAttribute('data-skip') && nodes[i].getTotalLength) els.push(nodes[i]);
+    }
+    var n = els.length, s = 1 / (C.speed || 1);
+    var stagger = Math.min(STAGGER_MAX, STAGGER_SPAN / Math.max(1, n - 1));
+    var vb = svg.viewBox && svg.viewBox.baseVal;
+    var scale = vb && vb.width ? svg.getBoundingClientRect().width / vb.width : 1;
+    var introEnd = 0, pulses = [];
+
+    for (var j = 0; j < n; j++) {
+      var el = els[j], len = 0;
+      try { len = el.getTotalLength(); } catch (e) {}
+      var cs = window.getComputedStyle(el);
+      var start = (DELAY + j * stagger) * s;
+      var anim;
+      el.style.strokeDasharray = len;
+      el.style.strokeDashoffset = len;
+      if (cs.fill === 'none') {
+        anim = 'swtl-ld-draw ' + (STROKE_DUR * s) + 's ' + EASE_DRAW + ' ' + start + 's forwards';
+        introEnd = Math.max(introEnd, start + STROKE_DUR * s);
+      } else {
+        el.style.stroke = cs.fill;
+        el.style.strokeWidth = (TRACE_PX / (scale || 1)) + 'px';
+        el.style.fillOpacity = 0;
+        anim = 'swtl-ld-draw ' + (TRACE_DUR * s) + 's ' + EASE_DRAW + ' ' + start + 's forwards, ' +
+               'swtl-ld-ink ' + (INK_DUR * s) + 's ' + EASE_INK + ' ' + (start + INK_AT * s) + 's forwards';
+        introEnd = Math.max(introEnd, start + (INK_AT + INK_DUR) * s);
+      }
+      el.style.animation = anim;
+      if (el.hasAttribute('data-pulse')) pulses.push(el);
+    }
+    for (var p = 0; p < pulses.length; p++) {
+      pulses[p].style.animation += ', swtl-ld-pulse 2.4s ease-in-out ' + introEnd + 's infinite';
+    }
+    return introEnd;
+  }
+
+  function mount() {
+    overlay = document.createElement('div');
+    overlay.id = 'swtl-ld-preloader';
+    overlay.setAttribute('aria-hidden', 'true');
+    var tpl = document.getElementById('swtl-ld-markup');
+    if (tpl && tpl.content) overlay.appendChild(tpl.content.cloneNode(true));
+    document.body.insertBefore(overlay, document.body.firstChild);
+    root.classList.remove('swtl-ld-init');
+    startTime = Date.now();
+
+    var svg = overlay.querySelector('svg');
+    var introEnd = 0;
+    if (svg && !reduced) introEnd = choreograph(svg);
+    minShow = reduced ? 400 : (C.minShow === 'auto' ? Math.round((introEnd + 0.95) * 1000) : C.minShow);
+
+    if (C.oncePerSession) {
+      try { sessionStorage.setItem(KEY, '1'); } catch (e) {}
+    }
+    setTimeout(dismiss, Math.max(C.maxWait, 1000));
+    if (document.readyState === 'complete') { pageLoaded = true; tryDismiss(); }
+    else window.addEventListener('load', function () { pageLoaded = true; tryDismiss(); });
+  }
+
+  function tryDismiss() {
+    if (!pageLoaded || dismissed) return;
+    var elapsed = Date.now() - startTime;
+    if (elapsed >= minShow) dismiss();
+    else setTimeout(dismiss, minShow - elapsed);
+  }
+
+  function dismiss() {
+    if (dismissed || !overlay) return;
+    dismissed = true;
+    overlay.classList.add('swtl-ld-done');
+    root.classList.remove('swtl-ld-lock');
+    setTimeout(function () {
+      if (overlay && overlay.parentNode) overlay.parentNode.removeChild(overlay);
+    }, 650);
+  }
+
+  if (document.body) mount();
+  else document.addEventListener('DOMContentLoaded', mount);
+})();
+</script>
+<!-- ============ end SWTL line-draw preloader ============ -->

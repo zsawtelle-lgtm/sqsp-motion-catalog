@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>SWTL Motion Presets</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..800&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+  /* Layout: a reel sheet — tight header strip, then a two-up grid of 16:9 frames, each with a spec line under it. */
+  :root {
+    --bg: #E7E8E3;          /* cool studio grey, slight green bias */
+    --surface: #F5F5F1;
+    --fg: #151715;
+    --muted: #5C615A;
+    --rule: #C9CCC4;
+    --accent: #2D45E0;      /* cobalt: contrasts the warm previews */
+    --on-accent: #F5F5F1;
+    --font-display: "Archivo", "Helvetica Neue", Arial, sans-serif;
+    --font-body: "Archivo", "Helvetica Neue", Arial, sans-serif;
+    --font-data: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+    --step--1: 0.8125rem; --step-0: 0.9375rem; --step-1: 1.25rem; --step-4: clamp(2.4rem, 6vw, 4.6rem);
+  }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+    --bg: #121412; --surface: #1B1E1B; --fg: #E8E9E3; --muted: #9AA096; --rule: #2E322E;
+    --accent: #8A9AFF; --on-accent: #121412; color-scheme: dark; } }
+  :root[data-theme="dark"] {
+    --bg: #121412; --surface: #1B1E1B; --fg: #E8E9E3; --muted: #9AA096; --rule: #2E322E;
+    --accent: #8A9AFF; --on-accent: #121412; color-scheme: dark; }
+
+  * { box-sizing: border-box; }
+  body {
+    background: var(--bg); color: var(--fg);
+    font: 400 var(--step-0)/1.55 var(--font-body);
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+    padding-block: 0 64px;
+  }
+  .wrap { max-width: 1240px; margin: 0 auto; }
+
+  header.top {
+    display: grid; grid-template-columns: 1fr auto; gap: 24px 40px; align-items: end;
+    padding-block: 48px 28px; border-bottom: 1px solid var(--rule);
+  }
+  .eyebrow { font: 500 var(--step--1)/1 var(--font-data); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin: 0 0 14px; }
+  h1 {
+    font-family: var(--font-display); font-weight: 800; font-stretch: 125%;
+    font-size: var(--step-4); line-height: .92; letter-spacing: -.02em; margin: 0; text-wrap: balance;
+  }
+  h1 span { color: var(--accent); }
+  .lede { max-width: 52ch; color: var(--muted); margin: 18px 0 0; text-wrap: pretty; }
+  .stats { display: flex; gap: 28px; font-family: var(--font-data); font-size: var(--step--1); color: var(--muted); margin: 0; }
+  .stats div { display: grid; gap: 4px; }
+  .stats dt { text-transform: uppercase; letter-spacing: .08em; }
+  .stats dd { margin: 0; color: var(--fg); font-size: var(--step-1); font-variant-numeric: tabular-nums; }
+
+  .filters { display: flex; flex-wrap: wrap; gap: 8px; padding-block: 22px; }
+  .chip {
+    font: 500 var(--step--1)/1 var(--font-body); letter-spacing: .02em;
+    padding: 9px 14px; border-radius: 999px; border: 1px solid var(--rule);
+    background: transparent; color: var(--fg); cursor: pointer;
+  }
+  .chip:hover { border-color: var(--fg); }
+  .chip.is-on { background: var(--fg); color: var(--bg); border-color: var(--fg); }
+  .chip:focus-visible, .link:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+
+  .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 44px 28px; }
+  @media (max-width: 760px) { .grid { grid-template-columns: 1fr; } header.top { grid-template-columns: 1fr; } }
+
+  .card { display: grid; gap: 16px; min-width: 0; }
+  .card[hidden] { display: none; }
+  .media { position: relative; aspect-ratio: 16 / 9; max-width: 100%; background: var(--surface); overflow: hidden; }
+  .media video { display: block; width: 100%; height: 100%; object-fit: cover; }
+  .num {
+    position: absolute; left: 0; top: 0; padding: 7px 10px;
+    font: 500 var(--step--1)/1 var(--font-data); background: var(--fg); color: var(--bg);
+  }
+  .badge {
+    position: absolute; right: 10px; top: 10px; padding: 5px 8px; border-radius: 4px;
+    font: 500 11px/1 var(--font-data); text-transform: uppercase; letter-spacing: .08em;
+    background: var(--surface); color: var(--muted);
+  }
+  .badge--blocked { background: #B3261E; color: #fff; }
+  .playing .media::after {
+    content: ""; position: absolute; right: 12px; bottom: 12px; width: 8px; height: 8px; border-radius: 50%;
+    background: var(--accent); box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 25%, transparent);
+  }
+
+  .body { display: grid; gap: 8px; min-width: 0; }
+  .cat { margin: 0; font: 500 var(--step--1)/1 var(--font-data); letter-spacing: .08em; text-transform: uppercase; color: var(--accent); }
+  .card h2 { margin: 0; font: 700 var(--step-1)/1.2 var(--font-display); font-stretch: 112%; letter-spacing: -.01em; }
+  .use { margin: 0; color: var(--muted); max-width: 60ch; }
+  .tags { list-style: none; padding: 0; margin: 4px 0 0; display: flex; flex-wrap: wrap; gap: 6px; }
+  .tags li { font-size: var(--step--1); padding: 3px 9px; border: 1px solid var(--rule); border-radius: 4px; }
+  .foot {
+    display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px;
+    margin-top: 8px; padding-top: 12px; border-top: 1px solid var(--rule);
+  }
+  .install { font: 400 var(--step--1)/1.3 var(--font-data); color: var(--muted); }
+  .link {
+    display: inline-flex; align-items: center; gap: 8px; color: var(--fg); text-decoration: none;
+    font-weight: 600; font-size: var(--step-0);
+  }
+  .link svg { width: 20px; height: 20px; transition: transform .25s cubic-bezier(.22,1,.36,1), color .25s; }
+  .link:hover { color: var(--accent); }
+  .link:hover svg { transform: translateX(5px); }
+
+  footer.note { margin-top: 56px; padding-top: 18px; border-top: 1px solid var(--rule); color: var(--muted); font-size: var(--step--1); max-width: 70ch; }
+  footer.note code { font-family: var(--font-data); }
+
+  @media (prefers-reduced-motion: reduce) { .link svg { transition: none; } }
+</style>
+
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div>
+      <p class="eyebrow">SWTL Design Co · Squarespace 7.1</p>
+      <h1>Motion<br><span>presets</span></h1>
+      <p class="lede">Drop-in animation for Fluid Engine sites. Every preset stays editable in the Squarespace editor, respects reduced motion, and ships with an install guide.</p>
+    </div>
+    <dl class="stats">
+      <div><dt>Presets</dt><dd>1</dd></div>
+      <div><dt>Platform</dt><dd>7.1 FE</dd></div>
+      <div><dt>Libraries</dt><dd>0</dd></div>
+    </dl>
+  </header>
+
+  <nav class="filters" aria-label="Filter by category"><button class="chip is-on" data-filter="all">All</button><button class="chip" data-filter="Preloader">Preloader</button></nav>
+
+  <main class="grid" id="grid">
+    <article class="card" data-cat="Preloader">
+      <div class="media">
+        <video src="presets/01-line-draw-preloader/preview.mp4" poster="presets/01-line-draw-preloader/poster.png"
+               muted loop playsinline preload="none" aria-label="Line-Draw Preloader preview"></video>
+        <span class="num">01</span><span class="badge badge--beta">beta</span>
+      </div>
+      <div class="body">
+        <p class="cat">Preloader</p>
+        <h2>Line-Draw Preloader</h2>
+        <p class="use">Draws any outlined SVG logo — lines stroke in, letters trace then ink — while the site loads.</p>
+        <ul class="tags" aria-label="Best for"><li>Architecture</li><li>Design-build</li><li>Law firm</li><li>Agency</li></ul>
+        <div class="foot">
+          <span class="install">Header injection</span>
+          <a class="link" href="https://github.com/zsawtelle-lgtm/sqsp-motion-catalog/blob/main/presets/01-line-draw-preloader/INSTALL.md">Install guide <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13.5 4.5 21 12m0 0-7.5 7.5M21 12H3"/></svg></a>
+        </div>
+      </div>
+    </article></main>
+
+  <footer class="note">
+    Hover a preview to play it (on phones, previews play as they scroll into view). Colors in every preset come from three shared variables:
+    <code>--swtl-paper</code>, <code>--swtl-ink</code>, <code>--swtl-accent</code>. Set them once in Custom CSS to restyle the whole set for a client.
+  </footer>
+</div>
+
+<script>
+(function () {
+  'use strict';
+  var cards = [].slice.call(document.querySelectorAll('.card'));
+  var reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var hover = window.matchMedia && window.matchMedia('(hover: hover)').matches;
+
+  function play(card) {
+    if (reduced) return;
+    var v = card.querySelector('video');
+    if (v.preload === 'none') v.preload = 'auto';
+    var p = v.play(); if (p && p.catch) p.catch(function () {});
+    card.classList.add('playing');
+  }
+  function stop(card) {
+    var v = card.querySelector('video');
+    v.pause(); card.classList.remove('playing');
+  }
+
+  if (hover) {
+    cards.forEach(function (c) {
+      c.addEventListener('mouseenter', function () { play(c); });
+      c.addEventListener('mouseleave', function () { stop(c); });
+      c.addEventListener('focusin', function () { play(c); });
+      c.addEventListener('focusout', function () { stop(c); });
+    });
+  } else if ('IntersectionObserver' in window) {
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (e) { e.isIntersecting ? play(e.target) : stop(e.target); });
+    }, { threshold: 0.6 });
+    cards.forEach(function (c) { io.observe(c); });
+  }
+
+  var chips = [].slice.call(document.querySelectorAll('.chip'));
+  chips.forEach(function (chip) {
+    chip.addEventListener('click', function () {
+      var f = chip.getAttribute('data-filter');
+      chips.forEach(function (c) { c.classList.toggle('is-on', c === chip); c.setAttribute('aria-pressed', c === chip); });
+      cards.forEach(function (card) { card.hidden = !(f === 'all' || card.getAttribute('data-cat') === f); });
+    });
+  });
+})();
+</script>
+
+</body>
+</html>

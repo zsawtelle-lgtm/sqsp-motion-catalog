@@ -1,0 +1,13 @@
+{
+  "id": "01",
+  "slug": "01-line-draw-preloader",
+  "name": "Line-Draw Preloader",
+  "category": "Preloader",
+  "use": "Draws any outlined SVG logo — lines stroke in, letters trace then ink — while the site loads.",
+  "best_for": ["Architecture", "Design-build", "Law firm", "Agency"],
+  "install": "Header injection",
+  "dependencies": "None",
+  "snippet_kb": 11.4,
+  "status": "beta",
+  "notes": "Snippet weight is mostly the outlined placeholder wordmark; a client logo replaces it."
+}
