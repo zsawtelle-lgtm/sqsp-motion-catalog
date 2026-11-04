@@ -1,0 +1,18 @@
+{
+  "id": "14",
+  "slug": "14-hover-image-list",
+  "name": "Hover Image Reveal List",
+  "category": "Interaction",
+  "use": "A big-type list of project or service links. Hovering a row floats its image under the cursor with a lagged, tilting follow; other rows dim and the arrow nudges. Touch screens get inline thumbnails instead.",
+  "best_for": [
+    "Portfolio",
+    "Architecture",
+    "Agency",
+    "Services index"
+  ],
+  "install": "Footer injection + Code Block",
+  "dependencies": "None",
+  "snippet_kb": 11.6,
+  "status": "beta",
+  "notes": "Over the 8 KB budget (11.6 KB unminified): image pairing (click-through link match, then order), two display modes (floating image / touch thumbnails), keyboard focus and reduced-motion paths. Paired Image Blocks are hidden with visibility:hidden, so they keep their grid space: stack them in one small cell (desktop and mobile layout). Big row type applies on the live site only; the editor shows the Text Block's own style."
+}

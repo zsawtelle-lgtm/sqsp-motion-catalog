@@ -21,6 +21,14 @@ previews.
 | 08 | [Marquee Band](presets/08-marquee-band/INSTALL.md) | Text | Footer injection + Code Block |
 | 09 | [Sticky Stacked-Card Scroll](presets/09-sticky-stack/INSTALL.md) | Scroll effect | Footer injection + Code Block |
 | 10 | [Parallax Depth Layers](presets/10-parallax-depth/INSTALL.md) | Scroll effect | Footer injection + Code Block |
+| 11 | [Stat Count-Up](presets/11-stat-countup/INSTALL.md) | Text | Footer injection + Code Block |
+| 12 | [Scroll Text Fill](presets/12-scroll-text-fill/INSTALL.md) | Text | Footer injection + Code Block |
+| 13 | [Horizontal Scroll Gallery](presets/13-horizontal-scroll/INSTALL.md) | Scroll effect | Footer injection + Code Block |
+| 14 | [Hover Image Reveal List](presets/14-hover-image-list/INSTALL.md) | Interaction | Footer injection + Code Block |
+| 15 | [Page Transition Wipe](presets/15-page-transition/INSTALL.md) | Page transition | Header injection |
+| 16 | [Before / After Slider](presets/16-before-after/INSTALL.md) | Interaction | Footer injection + Code Block |
+| 17 | [Marker Highlight & Underline Draw](presets/17-marker-highlight/INSTALL.md) | Text | Footer injection + Code Block |
+| 18 | [Curtain Footer Reveal](presets/18-curtain-footer/INSTALL.md) | Scroll effect | Footer injection |
 
 ## Shared rules
 
