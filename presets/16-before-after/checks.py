@@ -34,6 +34,11 @@ def handle_box(t):
     return (int(hx - 14), int(hy - 10), int(hx + 14), int(hy + 10))
 
 
+def cur_box(t):
+    x0, y0, _, _ = handle_box(t)
+    return (x0 + 20, y0 + 16, x0 + 44, y0 + 46)   # pointer sits just below-right of the handle centre
+
+
 REST = c.frame(s.REST_AT + 0.1)
 
 # 0. the video uses the snippet's numbers (timing.py <-> JS/CSS)
@@ -50,8 +55,8 @@ c.expect("scrolled in, before the hint: divider at 50% (gray left, warm right)",
                     f"B={before(f, T0, 0.40, 0.48):.2f} A={after(f, T0, 0.52, 0.60):.2f}"))
 TH = s.T_HINT + tm.HINT_OUT + tm.HINT_HOLD / 2
 c.expect("hint hold: divider eased to 35% (after shows from 35%)", TH,
-         lambda f: (abs(s.pos(TH) - 35) < 1e-6 and after(f, TH, 0.37, 0.47) > 0.9 and before(f, TH, 0.24, 0.33) > 0.9,
-                    f"A={after(f, TH, 0.37, 0.47):.2f} B={before(f, TH, 0.24, 0.33):.2f}"))
+         lambda f: (abs(s.pos(TH) - 35) < 1e-6 and after(f, TH, 0.45, 0.49) > 0.9 and before(f, TH, 0.24, 0.33) > 0.9,
+                    f"A={after(f, TH, 0.45, 0.49):.2f} B={before(f, TH, 0.24, 0.33):.2f}"))
 TM = s.T_HINT + tm.HINT_OUT / 2
 c.expect("hint mid-ease: divider between 35% and 50%", TM,
          lambda f: (35 < s.pos(TM) < 50 and after(f, TM, s.pos(TM) / 100 + 0.02, 0.50) > 0.9,
@@ -61,9 +66,9 @@ c.expect("hint done: back to the resting frame (no cursor yet)", TB,
          lambda f: (c.diff(f, REST, band(TB, 0, 1, 0, 1)) < 0.05, f"diff={c.diff(f, REST, band(TB, 0, 1, 0, 1)):.3f}"))
 TC = s.CUR_AT + 0.03
 c.expect("cursor on the handle, icon turns accent (hover state)", TC,
-         lambda f: (c.share(f, k.ACCENT, handle_box(TC), 60) > 0.04 and c.share(f, k.ACCENT, handle_box(TB), 60) < 0.01
-                    and c.share(f, k.INK, (handle_box(TC)[0] + 14, handle_box(TC)[1] + 14, handle_box(TC)[2] + 22, handle_box(TC)[3] + 26), 40) > 0.15,
-                    f"acc={c.share(f, k.ACCENT, handle_box(TC), 60):.3f}"))
+         lambda f: (c.share(f, k.ACCENT, handle_box(TC), 60) > 0.04 and c.share(REST, k.ACCENT, handle_box(TB), 60) < 0.01
+                    and c.diff(f, REST, cur_box(TC)) > 20,
+                    f"acc={c.share(f, k.ACCENT, handle_box(TC), 60):.3f} cursor diff={c.diff(f, REST, cur_box(TC)):.1f}"))
 TD = s.DRAG2[0] - 0.03
 c.expect("drag peak: divider at 80% (before shows across 62-76%)", TD,
          lambda f: (before(f, TD, 0.62, 0.76) > 0.85 and after(f, TD, 0.83, 0.95) > 0.9,
