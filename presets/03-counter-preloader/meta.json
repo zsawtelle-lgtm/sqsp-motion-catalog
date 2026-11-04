@@ -4,7 +4,12 @@
   "name": "Counter Preloader",
   "category": "Preloader",
   "use": "Big 0–100 counter and accent progress bar that only completes when the page has loaded, then wipes up.",
-  "best_for": ["Agency", "Portfolio", "Photography", "Product launch"],
+  "best_for": [
+    "Agency",
+    "Portfolio",
+    "Photography",
+    "Product launch"
+  ],
   "install": "Header injection",
   "dependencies": "None",
   "snippet_kb": 8.0,

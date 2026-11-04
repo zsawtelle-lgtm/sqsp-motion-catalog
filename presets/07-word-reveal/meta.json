@@ -1,0 +1,18 @@
+{
+  "id": "07",
+  "slug": "07-word-reveal",
+  "name": "Word-by-Word Headline Reveal",
+  "category": "Text",
+  "use": "Section headlines rise word by word from line masks on scroll; kicker and body fade up after.",
+  "best_for": [
+    "Architecture",
+    "Agency",
+    "Portfolio",
+    "Hospitality"
+  ],
+  "install": "Footer injection + Code Block",
+  "dependencies": "None",
+  "snippet_kb": 10.6,
+  "status": "beta",
+  "notes": "Over the 8 KB budget (unminified) because of the exact-innerHTML restore, aria-label bookkeeping, link-underline fix and per-marker overrides. Uses CSS keyframes (fill both) instead of transitions: transitions raced at page load in Chrome and occasionally skipped the hidden state. Chrome quirk handled: removing a CSSOM-written style attribute without reading it first leaves style=\"\"."
+}

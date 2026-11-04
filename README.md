@@ -14,13 +14,13 @@ previews.
 | 01 | [Line-Draw Preloader](presets/01-line-draw-preloader/INSTALL.md) | Preloader | Header injection |
 | 02 | [Split-Panel Preloader](presets/02-split-panel-preloader/INSTALL.md) | Preloader | Header injection |
 | 03 | [Counter Preloader](presets/03-counter-preloader/INSTALL.md) | Preloader | Header injection |
-| 04 | [Block Rise](presets/04-block-rise/INSTALL.md) | Section reveal | Footer + Code Block |
-| 05 | [Mask Wipe](presets/05-mask-wipe/INSTALL.md) | Section reveal | Footer + Code Block |
-| 06 | [Image Scale-Settle](presets/06-image-scale-settle/INSTALL.md) | Section reveal | Footer + Code Block |
-| 07 | [Word Reveal](presets/07-word-reveal/INSTALL.md) | Text | Footer + Code Block |
-| 08 | [Marquee Band](presets/08-marquee-band/INSTALL.md) | Text | Footer + Code Block |
-| 09 | [Sticky Stack](presets/09-sticky-stack/INSTALL.md) | Scroll | Footer + Code Block |
-| 10 | [Parallax Depth](presets/10-parallax-depth/INSTALL.md) | Scroll | Footer + Code Block |
+| 04 | [Staggered Block Rise](presets/04-block-rise/INSTALL.md) | Scroll reveal | Footer injection + Code Block |
+| 05 | [Mask / Clip Wipe Reveal](presets/05-mask-wipe/INSTALL.md) | Scroll reveal | Footer injection + Code Block |
+| 06 | [Image Scale-Settle](presets/06-image-scale-settle/INSTALL.md) | Scroll reveal | Footer injection + Code Block |
+| 07 | [Word-by-Word Headline Reveal](presets/07-word-reveal/INSTALL.md) | Text | Footer injection + Code Block |
+| 08 | [Marquee Band](presets/08-marquee-band/INSTALL.md) | Text | Footer injection + Code Block |
+| 09 | [Sticky Stacked-Card Scroll](presets/09-sticky-stack/INSTALL.md) | Scroll effect | Footer injection + Code Block |
+| 10 | [Parallax Depth Layers](presets/10-parallax-depth/INSTALL.md) | Scroll effect | Footer injection + Code Block |
 
 ## Shared rules
 

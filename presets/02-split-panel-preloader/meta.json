@@ -4,7 +4,12 @@
   "name": "Split-Panel Preloader",
   "category": "Preloader",
   "use": "Solid panels hold the logo over a running accent line, then slide apart to reveal the page.",
-  "best_for": ["Agency", "Fashion", "Portfolio", "Hospitality"],
+  "best_for": [
+    "Agency",
+    "Fashion",
+    "Portfolio",
+    "Hospitality"
+  ],
   "install": "Header injection",
   "dependencies": "None",
   "snippet_kb": 13.3,

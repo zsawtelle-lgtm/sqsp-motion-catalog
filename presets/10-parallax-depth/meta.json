@@ -4,8 +4,13 @@
   "name": "Parallax Depth Layers",
   "category": "Scroll effect",
   "use": "Blocks in a marked section scroll at different speeds (images sink, buttons float) for clamped, editor-true depth.",
-  "best_for": ["Architecture", "Interiors", "Hospitality", "Portfolio"],
-  "install": "Footer injection + Code Block marker",
+  "best_for": [
+    "Architecture",
+    "Interiors",
+    "Hospitality",
+    "Portfolio"
+  ],
+  "install": "Footer injection + Code Block",
   "dependencies": "None",
   "snippet_kb": 8.0,
   "status": "beta",

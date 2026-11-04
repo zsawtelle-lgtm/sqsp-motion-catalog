@@ -4,8 +4,13 @@
   "name": "Mask / Clip Wipe Reveal",
   "category": "Scroll reveal",
   "use": "Editorial curtain wipe: an accent bar sweeps across each image block, then uncovers the photo as it settles from 108% to 100%.",
-  "best_for": ["Architecture", "Interiors", "Editorial", "Portfolio"],
-  "install": "Footer injection + Code Block marker per section",
+  "best_for": [
+    "Architecture",
+    "Interiors",
+    "Editorial",
+    "Portfolio"
+  ],
+  "install": "Footer injection + Code Block",
   "dependencies": "None",
   "snippet_kb": 7.9,
   "status": "beta",

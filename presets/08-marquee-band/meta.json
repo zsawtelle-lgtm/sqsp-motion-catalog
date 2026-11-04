@@ -4,8 +4,13 @@
   "name": "Marquee Band",
   "category": "Text",
   "use": "Endless ticker band of big words with accent stars. The phrases come from a normal Text Block, and an optional outlined second band runs the other way.",
-  "best_for": ["Architecture", "Design-build", "Agency", "Hospitality"],
-  "install": "Footer + Code Block",
+  "best_for": [
+    "Architecture",
+    "Design-build",
+    "Agency",
+    "Hospitality"
+  ],
+  "install": "Footer injection + Code Block",
   "dependencies": "None",
   "snippet_kb": 9.5,
   "status": "beta",

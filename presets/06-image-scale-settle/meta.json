@@ -4,8 +4,13 @@
   "name": "Image Scale-Settle",
   "category": "Scroll reveal",
   "use": "Images start slightly zoomed and dimmed, then slowly settle to full size and color as they scroll into view. The frame stays fixed.",
-  "best_for": ["Architecture", "Real estate", "Hospitality", "Photography"],
-  "install": "Footer injection + Code Block marker per section",
+  "best_for": [
+    "Architecture",
+    "Real estate",
+    "Hospitality",
+    "Photography"
+  ],
+  "install": "Footer injection + Code Block",
   "dependencies": "None",
   "snippet_kb": 7.9,
   "status": "beta",
