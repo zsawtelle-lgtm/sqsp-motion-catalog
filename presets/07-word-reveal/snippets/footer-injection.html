@@ -1,0 +1,244 @@
+<!-- ==========================================================
+     SWTL MOTION · 07 WORD-BY-WORD HEADLINE REVEAL     v1.0.0
+     Paste into: Settings → Developer Tools → Code Injection → FOOTER
+     Then add a Code Block holding  <div data-swtl-words hidden></div>
+     to every section that should animate.
+     Docs: presets/07-word-reveal/INSTALL.md
+     ========================================================== -->
+<style>
+  /* Hidden states apply only after the script adds html.swtl-wr-on. */
+  .swtl-wr-w {
+    display: inline-block;
+    /* line mask: open above and to the sides, closed just under descenders */
+    clip-path: inset(-0.4em -0.25em -0.1em -0.25em);
+  }
+  .swtl-wr-in { display: inline-block; }
+  html.swtl-wr-on .swtl-wr-in { transform: translateY(105%); }
+  html.swtl-wr-on .swtl-wr-in.swtl-wr-show {
+    transform: none;
+    animation: swtl-wr-up var(--swtl-wr-dur, 0.9s) cubic-bezier(.16, 1, .3, 1) both;
+  }
+  html.swtl-wr-on .swtl-wr-fade { opacity: 0; }
+  html.swtl-wr-on .swtl-wr-fade.swtl-wr-show {
+    opacity: 1;
+    animation: swtl-wr-fade 0.7s cubic-bezier(.22, 1, .36, 1) both;
+  }
+  /* keyframes + fill "both": the hidden frame holds through the delay with
+     no dependence on a committed before-style (transitions race at load) */
+  @keyframes swtl-wr-up   { from { transform: translateY(105%); } to { transform: none; } }
+  @keyframes swtl-wr-fade { from { opacity: 0; transform: translateY(var(--swtl-wr-rise, 14px)); } to { opacity: 1; transform: none; } }
+
+  /* inline-blocks drop an ancestor link's underline: move it onto the words */
+  a.swtl-wr-ul { text-decoration-color: transparent; }
+  a.swtl-wr-ul .swtl-wr-in { text-decoration: underline; text-decoration-color: currentColor; }
+
+  .swtl-wr-accent em, .swtl-wr-accent strong { color: var(--swtl-accent, #D4552B); }
+</style>
+
+<script>
+(function () {
+  'use strict';
+
+  /* ---------------- CONFIG ----------------
+     Optional: define window.SwtlWordReveal = { ... } ABOVE this snippet.
+     Per section: data-* on the marker div wins (data-selector,
+     data-stagger, data-duration, data-fade, data-accent="false").    */
+  var C = {
+    selector: 'h1, h2',  /* headings to split, inside .sqs-html-content */
+    stagger: 0.07,       /* s between words */
+    duration: 0.9,       /* s per word (expo out) */
+    follow: 0.30,        /* s after the last word starts → fades begin */
+    fade: 'h3, h4, p',   /* text that fades up after the heading; '' = off */
+    fadeStagger: 0.10,   /* s between faded items */
+    fadeDuration: 0.7,
+    accent: true,        /* <em>/<strong> words get --swtl-accent */
+    threshold: 0.2       /* share of the heading visible before it plays */
+  };
+  var user = window.SwtlWordReveal || {};
+  for (var key in user) { if (Object.prototype.hasOwnProperty.call(user, key)) C[key] = user[key]; }
+  /* ----------------------------------------- */
+
+  var framed = true;
+  try { framed = window.self !== window.top; } catch (e) {}
+  if (framed) return;
+  if (!('IntersectionObserver' in window)) return;
+  var reduced = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+
+  var root = document.documentElement, body = document.body;
+  var EDIT = /\b(sqs-edit-mode-active|sqs-is-page-editing)\b/;
+  var WS = /([ \t\n\r\f]+)/;   /* ASCII spaces only: &nbsp; keeps words joined */
+  var items = [], timers = [], io = null, active = false;
+
+  function opt(marker, name, fallback) {
+    var v = marker.getAttribute('data-' + name);
+    if (v === null) return fallback;
+    if (typeof fallback === 'number') return parseFloat(v);
+    if (typeof fallback === 'boolean') return v !== 'false';
+    return v;
+  }
+
+  function splitNode(node) {
+    var kids = Array.prototype.slice.call(node.childNodes);
+    for (var i = 0; i < kids.length; i++) {
+      var k = kids[i];
+      if (k.nodeType === 1) { splitNode(k); continue; }
+      if (k.nodeType !== 3 || !/\S/.test(k.nodeValue)) continue;
+      var parts = k.nodeValue.split(WS), frag = document.createDocumentFragment();
+      for (var j = 0; j < parts.length; j++) {
+        if (!parts[j]) continue;
+        if (WS.test(parts[j])) { frag.appendChild(document.createTextNode(parts[j])); continue; }
+        var w = document.createElement('span'), inn = document.createElement('span');
+        w.className = 'swtl-wr-w';
+        w.setAttribute('aria-hidden', 'true');
+        inn.className = 'swtl-wr-in';
+        inn.textContent = parts[j];
+        w.appendChild(inn);
+        frag.appendChild(w);
+      }
+      node.replaceChild(frag, k);
+    }
+  }
+
+  function label(el, it) {
+    var c = el.cloneNode(true), brs = c.querySelectorAll('br');
+    for (var i = 0; i < brs.length; i++) brs[i].parentNode.replaceChild(document.createTextNode(' '), brs[i]);
+    it.labels.push([el, el.getAttribute('aria-label')]);
+    el.setAttribute('aria-label', c.textContent.replace(/[ \t\n\r\f]+/g, ' ').replace(/^ | $/g, ''));
+  }
+
+  function unsplit(it) {
+    if (it.kind !== 'h' || !it.split) return;
+    var ul = it.el.querySelectorAll('.swtl-wr-ul');
+    for (var u = 0; u < ul.length; u++) {
+      ul[u].classList.remove('swtl-wr-ul');
+      if (!ul[u].getAttribute('class')) ul[u].removeAttribute('class');
+    }
+    var ws = it.el.querySelectorAll('.swtl-wr-w');
+    for (var i = 0; i < ws.length; i++) {
+      ws[i].parentNode.replaceChild(document.createTextNode(ws[i].textContent), ws[i]);
+    }
+    it.el.normalize();
+    if (it.el.innerHTML !== it.html) it.el.innerHTML = it.html;   /* byte-identical */
+    for (var j = 0; j < it.labels.length; j++) {
+      var l = it.labels[j];
+      if (l[1] === null) l[0].removeAttribute('aria-label'); else l[0].setAttribute('aria-label', l[1]);
+    }
+    it.labels = [];
+    it.split = false;
+  }
+
+  function clean(it) {
+    unsplit(it);
+    it.el.classList.remove('swtl-wr-fade', 'swtl-wr-show', 'swtl-wr-accent');
+    if (!it.el.getAttribute('class')) it.el.removeAttribute('class');
+    if (it.kind === 'f') {
+      it.el.getAttribute('style');   /* flush Chrome's lazy style attr, or removal leaves style="" */
+      if (it.style === null) it.el.removeAttribute('style'); else it.el.setAttribute('style', it.style);
+    }
+  }
+
+  function reveal(it) {
+    if (it.done) return;
+    it.done = true;
+    var now = performance.now() / 1000, sec = it.sec;
+    var start = Math.max(now, sec.clock), end;
+    if (it.kind === 'h') {
+      var ins = it.el.querySelectorAll('.swtl-wr-in'), n = ins.length;
+      for (var i = 0; i < n; i++) {
+        ins[i].style.animationDelay = (start - now + i * it.cfg.stagger).toFixed(3) + 's';
+        ins[i].style.setProperty('--swtl-wr-dur', it.cfg.duration + 's');
+        ins[i].classList.add('swtl-wr-show');
+      }
+      sec.clock = start + Math.max(0, n - 1) * it.cfg.stagger + it.cfg.follow;
+      end = start + Math.max(0, n - 1) * it.cfg.stagger + it.cfg.duration;
+      /* once at rest, unwrap back to the editor's original markup */
+      timers.push(setTimeout(function () { unsplit(it); }, (end - now) * 1000 + 80));
+    } else {
+      it.el.style.animationDelay = (start - now).toFixed(3) + 's';
+      it.el.classList.add('swtl-wr-show');
+      sec.clock = start + it.cfg.fadeStagger;
+      end = start + it.cfg.fadeDuration;
+      timers.push(setTimeout(function () { clean(it); }, (end - now) * 1000 + 80));
+    }
+  }
+
+  function init() {
+    if (active || EDIT.test(body.className)) return;
+    var markers = document.querySelectorAll('[data-swtl-words]');
+    if (!markers.length) return;
+    active = true;
+    if (!reduced) root.classList.add('swtl-wr-on');
+    io = new IntersectionObserver(function (entries) {
+      /* headings first, so a section's kicker/body follow its headline */
+      var hit = [];
+      for (var i = 0; i < entries.length; i++) {
+        if (entries[i].isIntersecting) { hit.push(entries[i].target._swtlWr); io.unobserve(entries[i].target); }
+      }
+      hit.sort(function (a, b) { return (a.kind === 'h' ? 0 : 1) - (b.kind === 'h' ? 0 : 1) || a.order - b.order; });
+      for (var j = 0; j < hit.length; j++) reveal(hit[j]);
+    }, { threshold: C.threshold });
+
+    var order = 0;
+    for (var m = 0; m < markers.length; m++) {
+      var mk = markers[m], section = mk.closest('section.page-section') || mk.closest('section');
+      if (!section) continue;
+      var cfg = {
+        stagger: opt(mk, 'stagger', C.stagger), duration: opt(mk, 'duration', C.duration),
+        follow: C.follow, fadeStagger: C.fadeStagger, fadeDuration: C.fadeDuration
+      };
+      var sel = opt(mk, 'selector', C.selector), fade = opt(mk, 'fade', C.fade), accent = opt(mk, 'accent', C.accent);
+      var sec = { clock: 0 };
+      var found = section.querySelectorAll('.sqs-html-content');
+      for (var b = 0; b < found.length; b++) {
+        var hs = sel ? found[b].querySelectorAll(sel) : [];
+        for (var h = 0; h < hs.length; h++) {
+          var el = hs[h];
+          if (el._swtlWr || !/\S/.test(el.textContent)) continue;
+          if (accent) el.classList.add('swtl-wr-accent');
+          var it = { el: el, kind: 'h', sec: sec, cfg: cfg, html: el.innerHTML, labels: [], split: !reduced, order: order++ };
+          el._swtlWr = it;
+          items.push(it);
+          if (reduced) continue;   /* reduced motion: final state, no split */
+          label(el, it);
+          var links = el.querySelectorAll('a');
+          for (var a = 0; a < links.length; a++) {
+            label(links[a], it);
+            if (/underline/.test(getComputedStyle(links[a]).textDecorationLine)) links[a].classList.add('swtl-wr-ul');
+          }
+          splitNode(el);
+          io.observe(el);
+        }
+        if (reduced) continue;
+        var fs = fade ? found[b].querySelectorAll(fade) : [];
+        for (var f = 0; f < fs.length; f++) {
+          if (fs[f]._swtlWr || (sel && fs[f].closest(sel))) continue;
+          var ft = { el: fs[f], kind: 'f', sec: sec, cfg: cfg, labels: [], style: fs[f].getAttribute('style'), order: order++ };
+          fs[f].classList.add('swtl-wr-fade');
+          fs[f]._swtlWr = ft;
+          items.push(ft);
+          io.observe(fs[f]);
+        }
+      }
+    }
+  }
+
+  function teardown() {
+    if (!active) return;
+    active = false;
+    if (io) io.disconnect();
+    for (var t = 0; t < timers.length; t++) clearTimeout(timers[t]);
+    timers = [];
+    for (var i = 0; i < items.length; i++) { clean(items[i]); delete items[i].el._swtlWr; }
+    items = [];
+    root.classList.remove('swtl-wr-on');
+  }
+
+  /* Editor safety: tear down the moment edit mode starts, re-init after. */
+  new MutationObserver(function () {
+    if (EDIT.test(body.className)) teardown(); else init();
+  }).observe(body, { attributes: true, attributeFilter: ['class'] });
+
+  init();
+})();
+</script>
+<!-- ============ end SWTL word-by-word headline reveal ============ -->
