@@ -1,0 +1,18 @@
+{
+  "id": "17",
+  "slug": "17-marker-highlight",
+  "name": "Marker Highlight & Underline Draw",
+  "category": "Text",
+  "use": "Italic or bold words get a hand-drawn marker band, scribbled underline or rough circle as they scroll into view.",
+  "best_for": [
+    "Agency",
+    "Personal brand",
+    "Coaching",
+    "Editorial"
+  ],
+  "install": "Footer injection + Code Block",
+  "dependencies": "None",
+  "snippet_kb": 12.7,
+  "status": "beta",
+  "notes": "Over the 8 KB budget (unminified): three styles, Catmull-Rom path geometry, debounced resize rebuild and exact attribute restore. Highlight is pure CSS on the em/strong (box-decoration-break: clone, so wrapped lines each get a band; lines draw at the same time, not one after another). Underline/circle use one aria-hidden SVG overlay per Text block, appended to .sqs-block outside .sqs-html-content, so the text markup only gains a class while live. Stroke draw uses getTotalLength(), not pathLength. Circle falls back to per-line underline when the word wraps or is longer than circleMax."
+}

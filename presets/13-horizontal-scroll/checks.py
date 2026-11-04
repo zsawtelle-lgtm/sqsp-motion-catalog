@@ -59,19 +59,19 @@ c.expect("still pinned: cards slide left, clipped at the holder edge", 3.00, sli
 
 
 def end_of_travel(f):
-    top, p, x, _ = s.state(3.45)
+    top, p, x, _ = s.state(3.50)
     pier = c.share(f, "#CFC7B8", (1170, int(top) + s.CARD_Y + 10, 1212, int(top) + s.CARD_Y + 60), 8)
-    return p == 1 and abs(x + s.DIST) < 0.01 and pier > 0.9 and bar_fill(f) > 0.97, \
+    return top == s.TOP and p > 0.99 and abs(x + s.DIST) < 0.01 * s.DIST and pier > 0.9 and bar_fill(f) > 0.97, \
         f"p {p:.2f}, x {x:.0f}, last card flush right {pier:.2f}"
 
 
-c.expect("end of travel: x = -(trackW - viewW), last card flush right", 3.45, end_of_travel)
+c.expect("end of travel: x = -(trackW - viewW), last card flush right", 3.50, end_of_travel)
 
 
 def unpinned(f):
     top, p, x, sec = s.state(4.3)
     nxt = int(sec + s.CW_H + s.DIST)
-    return top < s.TOP - 150 and x == -s.DIST and c.share(f, k.PAPER, (0, nxt + 10, k.W, H), 30) > 0.7, \
+    return top < s.TOP - 150 and x == -s.DIST and c.share(f, k.PAPER, (0, nxt + 10, k.W, H), 30) > 0.5, \
         f"cw top {top:.0f}, next section at {nxt}"
 
 

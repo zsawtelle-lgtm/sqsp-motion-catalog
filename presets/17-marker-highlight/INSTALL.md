@@ -98,6 +98,7 @@ Paste this **above** the snippet in the same Footer box:
     stagger: 0.25,        // s between marks in one section
     delay: 0.15,          // s after the words come into view
     weight: 0.08,         // line thickness, as a share of the text size
+    circleMax: 16,        // longer words get an underline instead of a circle
     keepItalic: true      // false = marked words lose their italic/bold look
   };
 </script>
