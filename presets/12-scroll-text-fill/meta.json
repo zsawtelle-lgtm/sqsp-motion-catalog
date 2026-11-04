@@ -1,0 +1,18 @@
+{
+  "id": "12",
+  "slug": "12-scroll-text-fill",
+  "name": "Scroll Text Fill",
+  "category": "Text",
+  "use": "A large statement starts muted and fills to full ink word by word as you scroll; italic or bold words fill to the accent. Reverses when you scroll back up.",
+  "best_for": [
+    "Architecture",
+    "Agency",
+    "About pages",
+    "Brand statements"
+  ],
+  "install": "Footer injection + Code Block",
+  "dependencies": "None",
+  "snippet_kb": 8.9,
+  "status": "beta",
+  "notes": "Over the 8 KB budget (unminified) because of the exact-innerHTML restore, aria-label bookkeeping and per-marker overrides. Scroll-linked, not time-based: fill comes from the text's top edge between 85% and 40% of the viewport, so it reverses on scroll up and survives resize with no re-split (word spans stay inline). rAF runs only while a filled block intersects the viewport. Accent blend uses color-mix() with currentColor; browsers without color-mix show the accent at the dim opacity instead. aria-label + aria-hidden words on headings only; paragraphs keep their words exposed because aria-label is not allowed on <p>. Words inside a link: the underline under spaces stays full strength while words are dim."
+}

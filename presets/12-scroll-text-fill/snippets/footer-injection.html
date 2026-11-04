@@ -1,0 +1,208 @@
+<!-- ==========================================================
+     SWTL MOTION · 12 SCROLL TEXT FILL     v1.0.0
+     Paste into: Settings → Developer Tools → Code Injection → FOOTER
+     Then add a Code Block holding  <div data-swtl-fill hidden></div>
+     to every section that should fill.
+     Docs: presets/12-scroll-text-fill/INSTALL.md
+     ========================================================== -->
+<style>
+  /* Dim states apply only after the script adds html.swtl-tf-on.
+     --swtl-tf-f (0..1) is written per word by the script as you scroll. */
+  html.swtl-tf-on .swtl-tf-w {
+    opacity: calc(var(--swtl-tf-dim, 0.18) + (1 - var(--swtl-tf-dim, 0.18)) * var(--swtl-tf-f, 0));
+  }
+  /* <em>/<strong> words blend from the text color to the accent */
+  html.swtl-tf-on .swtl-tf-acc {
+    color: color-mix(in srgb, var(--swtl-accent, #D4552B) calc(var(--swtl-tf-f, 0) * 100%), currentColor);
+  }
+  @supports not (color: color-mix(in srgb, red 50%, blue)) {
+    html.swtl-tf-on .swtl-tf-acc { color: var(--swtl-accent, #D4552B); }
+  }
+  /* reduced motion: final state, no split */
+  .swtl-tf-accent em, .swtl-tf-accent strong { color: var(--swtl-accent, #D4552B); }
+</style>
+
+<script>
+(function () {
+  'use strict';
+
+  /* ---------------- CONFIG ----------------
+     Optional: define window.SwtlTextFill = { ... } ABOVE this snippet.
+     Per section: data-* on the marker div wins (data-selector,
+     data-start, data-end, data-soft, data-dim, data-accent="false").  */
+  var C = {
+    selector: 'h1, h2, h3, h4, p', /* text to fill, inside .sqs-html-content */
+    start: 0.85,   /* fill starts when the text's top reaches 85% of the viewport */
+    end: 0.40,     /* ...and is complete when it reaches 40% */
+    soft: 2,       /* words in the soft edge between filled and dim */
+    dim: null,     /* resting opacity; null = CSS var --swtl-tf-dim (0.18) */
+    accent: true   /* <em>/<strong> words fill to --swtl-accent */
+  };
+  var user = window.SwtlTextFill || {};
+  for (var key in user) { if (Object.prototype.hasOwnProperty.call(user, key)) C[key] = user[key]; }
+  /* ----------------------------------------- */
+
+  var framed = true;
+  try { framed = window.self !== window.top; } catch (e) {}
+  if (framed) return;
+  if (!('IntersectionObserver' in window)) return;
+  var reduced = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+
+  var root = document.documentElement, body = document.body;
+  var EDIT = /\b(sqs-edit-mode-active|sqs-is-page-editing)\b/;
+  var WS = /([ \t\n\r\f]+)/;   /* ASCII spaces only: &nbsp; keeps words joined */
+  var HEAD = /^H[1-6]$/;
+  var items = [], io = null, active = false, raf = 0, live = 0;
+
+  function opt(marker, name, fallback) {
+    var v = marker.getAttribute('data-' + name);
+    if (v === null) return fallback;
+    if (typeof fallback === 'number') return parseFloat(v);
+    if (typeof fallback === 'boolean') return v !== 'false';
+    if (fallback === null) return v === '' ? null : parseFloat(v);
+    return v;
+  }
+
+  function splitNode(node, it, acc) {
+    var kids = Array.prototype.slice.call(node.childNodes);
+    for (var i = 0; i < kids.length; i++) {
+      var k = kids[i];
+      if (k.nodeType === 1) { splitNode(k, it, acc || /^(EM|STRONG)$/.test(k.nodeName)); continue; }
+      if (k.nodeType !== 3 || !/\S/.test(k.nodeValue)) continue;
+      var parts = k.nodeValue.split(WS), frag = document.createDocumentFragment();
+      for (var j = 0; j < parts.length; j++) {
+        if (!parts[j]) continue;
+        if (WS.test(parts[j])) { frag.appendChild(document.createTextNode(parts[j])); continue; }
+        var w = document.createElement('span');
+        w.className = 'swtl-tf-w' + (acc && it.cfg.accent ? ' swtl-tf-acc' : '');
+        if (it.head) w.setAttribute('aria-hidden', 'true');
+        if (it.cfg.dim !== null && !isNaN(it.cfg.dim)) w.style.setProperty('--swtl-tf-dim', String(it.cfg.dim));
+        w.textContent = parts[j];
+        w._f = -1;
+        it.words.push(w);
+        frag.appendChild(w);
+      }
+      node.replaceChild(frag, k);
+    }
+  }
+
+  /* Headings: one aria-label with the original text, words aria-hidden.
+     Paragraphs keep their words exposed (aria-label is not allowed on <p>). */
+  function label(el, it) {
+    var c = el.cloneNode(true), brs = c.querySelectorAll('br');
+    for (var i = 0; i < brs.length; i++) brs[i].parentNode.replaceChild(document.createTextNode(' '), brs[i]);
+    it.labels.push([el, el.getAttribute('aria-label')]);
+    el.setAttribute('aria-label', c.textContent.replace(/[ \t\n\r\f]+/g, ' ').replace(/^ | $/g, ''));
+  }
+
+  function clean(it) {
+    var el = it.el;
+    if (it.words.length) {
+      for (var i = 0; i < it.words.length; i++) {
+        var w = it.words[i];
+        if (w.parentNode) w.parentNode.replaceChild(document.createTextNode(w.textContent), w);
+      }
+      el.normalize();
+      if (el.innerHTML !== it.html) el.innerHTML = it.html;   /* byte-identical */
+    }
+    for (var j = 0; j < it.labels.length; j++) {
+      var l = it.labels[j];
+      if (l[1] === null) l[0].removeAttribute('aria-label'); else l[0].setAttribute('aria-label', l[1]);
+    }
+    if (it.cls === null) el.removeAttribute('class'); else el.setAttribute('class', it.cls);
+    it.words = []; it.labels = [];
+  }
+
+  /* progress 0..1 from the text's top edge between the start and end lines */
+  function update(it) {
+    var vh = window.innerHeight || root.clientHeight;
+    var a = it.cfg.start * vh, b = it.cfg.end * vh;
+    var top = it.el.getBoundingClientRect().top;
+    var p = a === b ? (top <= b ? 1 : 0) : (a - top) / (a - b);
+    p = p < 0 ? 0 : p > 1 ? 1 : p;
+    if (p === it.p) return;
+    it.p = p;
+    var n = it.words.length, s = Math.max(0.01, it.cfg.soft), pos = p * (n + s);
+    for (var i = 0; i < n; i++) {
+      var f = (pos - i) / s;
+      f = f < 0 ? 0 : f > 1 ? 1 : Math.round(f * 1000) / 1000;
+      if (f !== it.words[i]._f) { it.words[i]._f = f; it.words[i].style.setProperty('--swtl-tf-f', String(f)); }
+    }
+  }
+
+  /* rAF runs only while at least one filled block is in view */
+  function loop() {
+    raf = 0;
+    for (var i = 0; i < items.length; i++) if (items[i].vis) update(items[i]);
+    if (live > 0 && active) raf = requestAnimationFrame(loop);
+  }
+
+  function init() {
+    if (active || EDIT.test(body.className)) return;
+    var markers = document.querySelectorAll('[data-swtl-fill]');
+    if (!markers.length) return;
+    active = true;
+    if (!reduced) root.classList.add('swtl-tf-on');
+    io = new IntersectionObserver(function (entries) {
+      for (var i = 0; i < entries.length; i++) {
+        var it = entries[i].target._swtlTf;
+        if (!it || it.vis === entries[i].isIntersecting) continue;
+        it.vis = entries[i].isIntersecting;
+        live += it.vis ? 1 : -1;
+        update(it);   /* leaving: settle at 0 or 1 before the loop stops */
+      }
+      if (live > 0 && !raf) raf = requestAnimationFrame(loop);
+    });
+
+    for (var m = 0; m < markers.length; m++) {
+      var mk = markers[m], section = mk.closest('section.page-section') || mk.closest('section');
+      if (!section) continue;
+      var cfg = {
+        start: opt(mk, 'start', C.start), end: opt(mk, 'end', C.end), soft: opt(mk, 'soft', C.soft),
+        dim: opt(mk, 'dim', C.dim), accent: opt(mk, 'accent', C.accent)
+      };
+      var sel = opt(mk, 'selector', C.selector);
+      var found = section.querySelectorAll('.sqs-html-content');
+      for (var b = 0; b < found.length && sel; b++) {
+        var els = found[b].querySelectorAll(sel);
+        for (var e = 0; e < els.length; e++) {
+          var el = els[e], up = el.parentElement && el.parentElement.closest(sel);
+          if (el._swtlTf || (up && found[b].contains(up)) || !/\S/.test(el.textContent)) continue;
+          var it = { el: el, cfg: cfg, head: HEAD.test(el.nodeName), html: el.innerHTML, cls: el.getAttribute('class'),
+                     labels: [], words: [], p: -1, vis: false };
+          el._swtlTf = it;
+          items.push(it);
+          if (reduced) { if (cfg.accent) el.classList.add('swtl-tf-accent'); continue; }
+          if (it.head) {
+            label(el, it);
+            var links = el.querySelectorAll('a');
+            for (var a = 0; a < links.length; a++) label(links[a], it);
+          }
+          splitNode(el, it, false);
+          update(it);   /* correct state before first paint */
+          io.observe(el);
+        }
+      }
+    }
+  }
+
+  function teardown() {
+    if (!active) return;
+    active = false;
+    if (io) io.disconnect();
+    if (raf) cancelAnimationFrame(raf);
+    raf = 0; live = 0;
+    for (var i = 0; i < items.length; i++) { clean(items[i]); delete items[i].el._swtlTf; }
+    items = [];
+    root.classList.remove('swtl-tf-on');
+  }
+
+  /* Editor safety: tear down the moment edit mode starts, re-init after. */
+  new MutationObserver(function () {
+    if (EDIT.test(body.className)) teardown(); else init();
+  }).observe(body, { attributes: true, attributeFilter: ['class'] });
+
+  init();
+})();
+</script>
+<!-- ============ end SWTL scroll text fill ============ -->
