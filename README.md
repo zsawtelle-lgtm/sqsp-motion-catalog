@@ -46,6 +46,10 @@ previews.
 }
 ```
 
+## Agents
+
+`SKILL.md` tells Claude Code (or Open Design, as an imported skill) how to install, customize and build presets from this repo.
+
 ## Repo layout
 
 ```
